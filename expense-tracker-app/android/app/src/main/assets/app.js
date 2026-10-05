@@ -850,6 +850,36 @@ function setupEventListeners() {
   });
   fileInput.addEventListener('change', handleImportJson);
 
+  // Khôi phục bằng dán mã JSON
+  const pasteBackdrop = document.getElementById('dialog-paste-backdrop');
+  const pasteInput = document.getElementById('input-paste-json');
+  const btnTriggerPaste = document.getElementById('btn-trigger-paste');
+  if (btnTriggerPaste) {
+    btnTriggerPaste.addEventListener('click', () => {
+      pasteInput.value = '';
+      pasteBackdrop.style.display = 'flex';
+      pasteInput.focus();
+    });
+  }
+  document.getElementById('btn-cancel-paste-json')?.addEventListener('click', () => {
+    pasteBackdrop.style.display = 'none';
+  });
+  document.getElementById('btn-confirm-paste-json')?.addEventListener('click', () => {
+    const raw = pasteInput.value.trim();
+    if (!raw) {
+      showToast('Vui lòng dán nội dung file JSON vào ô!');
+      return;
+    }
+    try {
+      const data = JSON.parse(raw);
+      if (applyRestoredData(data)) {
+        pasteBackdrop.style.display = 'none';
+      }
+    } catch (e) {
+      showToast('❌ Nội dung dán vào không phải là JSON hợp lệ!');
+    }
+  });
+
   // Xóa toàn bộ dữ liệu
   document.getElementById('btn-reset-all').addEventListener('click', () => {
     if (confirm('⚠️ Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu thu chi không? Dữ liệu đã xóa sẽ không thể phục hồi trừ khi bạn đã sao lưu!')) {
@@ -946,6 +976,25 @@ function exportCsv() {
   showToast('📊 Đã xuất file Excel (CSV) thành công!');
 }
 
+function applyRestoredData(data) {
+  if (!data || !Array.isArray(data.transactions)) {
+    showToast('❌ Dữ liệu không đúng định dạng sao lưu!');
+    return false;
+  }
+  if (State.transactions.length > 0) {
+    const ok = confirm(`Khôi phục sẽ thay thế ${State.transactions.length} giao dịch hiện tại bằng ${data.transactions.length} giao dịch từ bản sao lưu. Bạn có muốn tiếp tục?`);
+    if (!ok) return false;
+  }
+  State.transactions = data.transactions;
+  if (typeof data.initialBalance === 'number') {
+    State.initialBalance = data.initialBalance;
+  }
+  saveData();
+  renderApp();
+  showToast('✅ Khôi phục dữ liệu thành công!');
+  return true;
+}
+
 function handleImportJson(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -954,20 +1003,10 @@ function handleImportJson(e) {
   reader.onload = function(evt) {
     try {
       const data = JSON.parse(evt.target.result);
-      if (Array.isArray(data.transactions)) {
-        State.transactions = data.transactions;
-        if (typeof data.initialBalance === 'number') {
-          State.initialBalance = data.initialBalance;
-        }
-        saveData();
-        renderApp();
-        showToast('✅ Khôi phục dữ liệu từ file thành công!');
-      } else {
-        showToast('❌ File không đúng định dạng sao lưu!');
-      }
+      applyRestoredData(data);
     } catch (err) {
       console.error(err);
-      showToast('❌ Lỗi khi đọc file sao lưu!');
+      showToast('❌ Lỗi khi đọc file sao lưu JSON!');
     }
   };
   reader.readAsText(file);

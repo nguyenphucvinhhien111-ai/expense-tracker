@@ -226,8 +226,11 @@
                 <span class="setting-name">Khôi phục dữ liệu từ file</span>
                 <span class="setting-desc">Nhập lại file sao lưu JSON đã tải trước đó</span>
               </div>
-              <button class="setting-action-btn" id="btn-trigger-import">Chọn file</button>
-              <input type="file" id="file-import-input" accept=".json" style="display: none;" />
+              <div style="display: flex; gap: 8px;">
+                <button class="setting-action-btn" id="btn-trigger-import">Chọn file</button>
+                <button class="setting-action-btn" id="btn-trigger-paste">Dán mã</button>
+              </div>
+              <input type="file" id="file-import-input" accept=".json,application/json,text/plain" style="display: none;" />
             </div>
           </div>
 
@@ -372,6 +375,19 @@
           <div class="dialog-buttons">
             <button class="dialog-btn secondary" id="btn-cancel-init-balance">Hủy</button>
             <button class="dialog-btn primary" id="btn-confirm-init-balance">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: PASTE JSON IMPORT -->
+      <div class="modal-dialog-backdrop" id="dialog-paste-backdrop" style="display: none;">
+        <div class="modal-dialog" style="max-width: 380px;">
+          <h4 class="dialog-title">Dán nội dung JSON</h4>
+          <p class="dialog-desc">Mở file sao lưu JSON (hoặc copy tin nhắn gửi file), dán toàn bộ văn bản vào ô dưới đây để khôi phục:</p>
+          <textarea id="input-paste-json" class="form-input" rows="6" style="width: 100%; font-family: monospace; font-size: 0.78rem; margin-bottom: 14px; padding: 10px; border-radius: 8px; resize: vertical; box-sizing: border-box;" placeholder='{"version": 1, "transactions": [...]}'></textarea>
+          <div class="dialog-buttons">
+            <button class="dialog-btn secondary" id="btn-cancel-paste-json">Hủy</button>
+            <button class="dialog-btn primary" id="btn-confirm-paste-json">Khôi phục ngay</button>
           </div>
         </div>
       </div>
