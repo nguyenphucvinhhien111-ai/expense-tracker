@@ -47,17 +47,17 @@
 
 /* Light Theme Overrides */
 body.theme-light {
-  --bg-app: #f1f5f9;
+  --bg-app: #f8fafc;
   --bg-surface: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.95);
-  --bg-card-subtle: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f5f9;
   --bg-input: #f1f5f9;
   --border-color: rgba(0, 0, 0, 0.08);
   --border-focus: rgba(99, 102, 241, 0.6);
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
 
   --income-green: #059669;
   --income-green-bg: #ecfdf5;
@@ -70,6 +70,213 @@ body.theme-light {
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.12);
+
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+}
+
+/* Light Theme - App Layout & Header */
+body.theme-light .app-viewport {
+  background: radial-gradient(circle at 50% 20%, #e0e7ff 0%, #f1f5f9 65%, #e2e8f0 100%);
+}
+
+body.theme-light .app-header {
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .month-selector-bar {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.07);
+}
+
+body.theme-light .month-display {
+  color: #0f172a;
+}
+
+body.theme-light .nav-arrow-btn {
+  color: #475569;
+}
+
+body.theme-light .nav-arrow-btn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .today-chip-btn {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #4f46e5;
+}
+
+/* Light Theme - Balance Card (Khung Tiền) */
+body.theme-light .balance-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.06), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+}
+
+body.theme-light .balance-card-glow {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+}
+
+body.theme-light .balance-label {
+  color: #64748b;
+}
+
+body.theme-light .balance-amount {
+  color: #0f172a;
+}
+
+body.theme-light .balance-amount .currency-symbol {
+  color: #4f46e5;
+}
+
+body.theme-light .balance-divider {
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.08), transparent);
+}
+
+body.theme-light .stat-v-sep {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .stat-title {
+  color: #64748b;
+}
+
+body.theme-light .month-net-badge {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #64748b;
+}
+
+body.theme-light .month-net-badge strong {
+  color: #0f172a;
+}
+
+/* Light Theme - Bottom Navigation (Khung Nút Ở Dưới) */
+body.theme-light .bottom-nav {
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
+}
+
+body.theme-light .nav-item {
+  color: #64748b;
+}
+
+body.theme-light .nav-item.active {
+  color: #4f46e5;
+}
+
+body.theme-light .fab-circle {
+  border-color: #f8fafc;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+}
+
+/* Light Theme - Components & Lists */
+body.theme-light .hero-action-btn {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.07);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+body.theme-light .day-group {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.07);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+body.theme-light .day-header {
+  background: #f8fafc;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .day-title {
+  color: #475569;
+}
+
+body.theme-light .tx-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+body.theme-light .tx-cat-icon {
+  background: #f1f5f9;
+}
+
+body.theme-light .filter-pills {
+  background: #e2e8f0;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .filter-pill {
+  color: #64748b;
+}
+
+body.theme-light .filter-pill.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .search-box {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .setting-item {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .setting-action-btn {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #0f172a;
+}
+
+body.theme-light .setting-action-btn.primary {
+  background: #4f46e5;
+  color: #ffffff;
+  border: none;
+}
+
+body.theme-light .email-backup-card {
+  background: rgba(99, 102, 241, 0.05) !important;
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+body.theme-light .stats-overview-box {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.07);
+}
+
+body.theme-light .progress-track {
+  background: #e2e8f0;
+}
+
+body.theme-light .bottom-sheet {
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .sheet-drag-handle {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+body.theme-light .sheet-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .tx-type-toggle {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .modal-dialog {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
 }
 
 /* Base Reset */
