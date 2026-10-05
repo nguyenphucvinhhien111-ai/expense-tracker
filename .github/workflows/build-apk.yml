@@ -9,10 +9,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -34,18 +38,45 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Prepare Android environment
+      - name: Prepare Android environment and Keystore
         run: |
           DIR="${{ steps.locate-dir.outputs.dir }}"
           sed -i 's/\r$//' "$DIR/gradlew"
           chmod +x "$DIR/gradlew"
           echo "sdk.dir=$ANDROID_HOME" > "$DIR/local.properties"
+
+          KEYSTORE_FILE="$DIR/app/debug.keystore"
+          NEED_COMMIT=false
+
+          if [ -f "$KEYSTORE_FILE" ]; then
+            if ! keytool -list -keystore "$KEYSTORE_FILE" -storepass android -alias androiddebugkey > /dev/null 2>&1; then
+              echo "Keystore is invalid. Regenerating..."
+              rm -f "$KEYSTORE_FILE"
+            fi
+          fi
+
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            echo "Generating persistent debug.keystore using OpenJDK keytool..."
+            keytool -genkey -v -keystore "$KEYSTORE_FILE" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            NEED_COMMIT=true
+          fi
+
           mkdir -p ~/.android
-          if [ -f "$DIR/app/debug.keystore" ]; then
-            cp "$DIR/app/debug.keystore" ~/.android/debug.keystore
-          else
-            keytool -genkey -v -keystore "$DIR/app/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            cp "$DIR/app/debug.keystore" ~/.android/debug.keystore
+          cp "$KEYSTORE_FILE" ~/.android/debug.keystore
+
+          if [ "$NEED_COMMIT" = "true" ] && [ "${{ github.event_name }}" = "push" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "$KEYSTORE_FILE"
+            git commit -m "Auto-generate persistent debug.keystore [skip ci]" || true
+            git push origin HEAD:${{ github.ref_name }} || true
           fi
 
       - name: Build Debug APK
