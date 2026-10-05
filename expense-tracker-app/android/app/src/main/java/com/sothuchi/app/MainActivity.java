@@ -117,6 +117,11 @@ public class MainActivity extends AppCompatActivity {
         settings.setLoadWithOverviewMode(true);
         settings.setDisplayZoomControls(false);
         settings.setBuiltInZoomControls(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        String ua = settings.getUserAgentString();
+        if (ua != null) {
+            settings.setUserAgentString(ua.replace("; wv", ""));
+        }
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {

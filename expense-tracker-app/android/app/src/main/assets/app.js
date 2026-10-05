@@ -127,6 +127,13 @@ function loadData() {
 }
 
 function saveData() {
+  saveDataLocally();
+  if (currentUser) {
+    syncToCloud();
+  }
+}
+
+function saveDataLocally() {
   try {
     localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(State.transactions));
     localStorage.setItem(STORAGE_KEY_INIT, String(State.initialBalance));
@@ -1138,6 +1145,312 @@ function setupPwaInstall() {
 }
 
 // =========================================================
+// GOOGLE FIREBASE & CLOUD SYNC
+// =========================================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBRP0KSVjhMT5yQSssYh5XnYLtzlJJE5P8",
+  authDomain: "quanlythuchi-7e095.firebaseapp.com",
+  projectId: "quanlythuchi-7e095",
+  storageBucket: "quanlythuchi-7e095.firebasestorage.app",
+  messagingSenderId: "240648948538",
+  appId: "1:240648948538:web:320e9331dc47797d45de03",
+  measurementId: "G-TJ1N90F5YR"
+};
+
+let firebaseApp = null;
+let firebaseAuth = null;
+let firestoreDb = null;
+let currentUser = null;
+let authMode = 'login'; // 'login' | 'register'
+
+function initFirebase() {
+  if (typeof firebase === 'undefined') {
+    console.log('Firebase SDK chưa sẵn sàng, ứng dụng tiếp tục hoạt động ngoại tuyến (Offline)');
+    return;
+  }
+  try {
+    if (!firebase.apps.length) {
+      firebaseApp = firebase.initializeApp(firebaseConfig);
+    } else {
+      firebaseApp = firebase.app();
+    }
+    firebaseAuth = firebase.auth();
+    firestoreDb = firebase.firestore();
+
+    // Lắng nghe trạng thái đăng nhập
+    firebaseAuth.onAuthStateChanged((user) => {
+      currentUser = user;
+      updateAuthUI(user);
+      if (user) {
+        syncFromCloud(user);
+      }
+    });
+
+    setupCloudEventListeners();
+  } catch (err) {
+    console.warn('Lỗi khởi tạo Firebase:', err);
+  }
+}
+
+function updateAuthUI(user) {
+  const unauthBox = document.getElementById('cloud-unauth-box');
+  const authBox = document.getElementById('cloud-auth-box');
+  const badge = document.getElementById('sync-status-badge');
+  const avatar = document.getElementById('user-avatar');
+  const nameEl = document.getElementById('user-display-name');
+  const emailEl = document.getElementById('user-display-email');
+
+  if (user) {
+    if (unauthBox) unauthBox.style.display = 'none';
+    if (authBox) authBox.style.display = 'block';
+
+    const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'Người dùng');
+    const initial = (displayName[0] || 'U').toUpperCase();
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (emailEl) emailEl.textContent = user.email || '';
+
+    if (avatar) {
+      if (user.photoURL) {
+        avatar.innerHTML = `<img src="${user.photoURL}" alt="avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+      } else {
+        avatar.textContent = initial;
+      }
+    }
+
+    if (badge) {
+      badge.textContent = '🟢 Đã kết nối';
+      badge.style.background = 'rgba(16, 185, 129, 0.15)';
+      badge.style.color = '#10b981';
+    }
+  } else {
+    if (unauthBox) unauthBox.style.display = 'block';
+    if (authBox) authBox.style.display = 'none';
+
+    if (badge) {
+      badge.textContent = 'Chưa đăng nhập';
+      badge.style.background = 'rgba(148, 163, 184, 0.2)';
+      badge.style.color = 'var(--text-muted)';
+    }
+  }
+}
+
+function setSyncBadge(text, color) {
+  const badge = document.getElementById('sync-status-badge');
+  if (badge) {
+    badge.textContent = text;
+    if (color) badge.style.color = color;
+  }
+}
+
+async function syncToCloud() {
+  if (!firestoreDb || !currentUser) return;
+  try {
+    setSyncBadge('Đang lưu mây...', '#f59e0b');
+    const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+    await docRef.set({
+      email: currentUser.email,
+      initialBalance: State.initialBalance,
+      transactions: State.transactions,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      appVersion: '1.0.0'
+    }, { merge: true });
+    setSyncBadge('🟢 Đã đồng bộ', '#10b981');
+  } catch (err) {
+    console.error('Lỗi khi lưu lên mây:', err);
+    setSyncBadge('Chưa đồng bộ', '#f43f5e');
+  }
+}
+
+async function syncFromCloud(user) {
+  if (!firestoreDb || !user) return;
+  try {
+    setSyncBadge('Đang nạp dữ liệu...', '#6366f1');
+    const docRef = firestoreDb.collection('users').doc(user.uid);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      if (Array.isArray(data.transactions)) {
+        if (State.transactions.length === 0) {
+          // Máy chưa có dữ liệu, nạp luôn từ đám mây
+          State.transactions = data.transactions;
+          if (typeof data.initialBalance === 'number') {
+            State.initialBalance = data.initialBalance;
+          }
+          saveDataLocally();
+          renderApp();
+          showToast(`☁️ Đã đồng bộ ${data.transactions.length} giao dịch từ Gmail!`);
+        } else {
+          // Máy đã có dữ liệu, xác nhận khôi phục
+          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch đã lưu. Bạn có muốn tải về và đồng bộ vào thiết bị này không?`);
+          if (ok) {
+            State.transactions = data.transactions;
+            if (typeof data.initialBalance === 'number') {
+              State.initialBalance = data.initialBalance;
+            }
+            saveDataLocally();
+            renderApp();
+            showToast('☁️ Đã khôi phục dữ liệu từ đám mây!');
+          } else {
+            // Đẩy dữ liệu hiện tại lên đám mây
+            await syncToCloud();
+          }
+        }
+      }
+    } else {
+      // Đám mây chưa có dữ liệu, tải dữ liệu hiện tại trong máy lên mây
+      await syncToCloud();
+      showToast('☁️ Đã sao lưu dữ liệu máy lên tài khoản Gmail!');
+    }
+    setSyncBadge('🟢 Đã đồng bộ', '#10b981');
+  } catch (err) {
+    console.error('Lỗi đồng bộ từ mây:', err);
+    setSyncBadge('Lỗi đồng bộ', '#f43f5e');
+  }
+}
+
+function setupCloudEventListeners() {
+  // Đăng nhập Google
+  const btnGoogle = document.getElementById('btn-login-google');
+  if (btnGoogle) {
+    btnGoogle.addEventListener('click', async () => {
+      if (!firebaseAuth) {
+        showToast('Firebase chưa sẵn sàng!');
+        return;
+      }
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try {
+        showToast('Đang kết nối tài khoản Google...');
+        await firebaseAuth.signInWithPopup(provider);
+        showToast('✅ Đăng nhập Google thành công!');
+      } catch (err) {
+        console.warn('Lỗi popup Google:', err);
+        openAuthModal('Để đảm bảo đăng nhập mượt mà trên điện thoại, bạn có thể nhập Email (Gmail) & Mật khẩu bên dưới:');
+      }
+    });
+  }
+
+  // Mở modal Email / Password
+  const btnEmailModal = document.getElementById('btn-login-email-modal');
+  if (btnEmailModal) {
+    btnEmailModal.addEventListener('click', () => {
+      openAuthModal();
+    });
+  }
+
+  // Đóng modal
+  const btnAuthCancel = document.getElementById('btn-auth-cancel');
+  if (btnAuthCancel) {
+    btnAuthCancel.addEventListener('click', () => {
+      document.getElementById('dialog-auth-backdrop').style.display = 'none';
+    });
+  }
+
+  // Chuyển đổi giữa Đăng nhập / Đăng ký
+  const btnToggleMode = document.getElementById('btn-auth-toggle-mode');
+  if (btnToggleMode) {
+    btnToggleMode.addEventListener('click', () => {
+      authMode = authMode === 'login' ? 'register' : 'login';
+      const title = document.getElementById('auth-modal-title');
+      const submit = document.getElementById('btn-auth-submit');
+      if (authMode === 'register') {
+        if (title) title.textContent = 'Đăng ký tài khoản mới';
+        if (submit) submit.textContent = 'Đăng ký & Đồng bộ';
+        btnToggleMode.textContent = 'Đã có tài khoản? Nhấn để Đăng nhập';
+      } else {
+        if (title) title.textContent = 'Đăng nhập tài khoản';
+        if (submit) submit.textContent = 'Đăng nhập';
+        btnToggleMode.textContent = 'Chưa có tài khoản? Nhấn để Đăng ký mới';
+      }
+    });
+  }
+
+  // Nút submit Đăng nhập / Đăng ký
+  const btnAuthSubmit = document.getElementById('btn-auth-submit');
+  if (btnAuthSubmit) {
+    btnAuthSubmit.addEventListener('click', async () => {
+      const emailInput = document.getElementById('auth-input-email');
+      const passInput = document.getElementById('auth-input-password');
+      const email = (emailInput ? emailInput.value : '').trim();
+      const password = (passInput ? passInput.value : '').trim();
+
+      if (!email || !email.includes('@')) {
+        showToast('⚠️ Vui lòng nhập email hợp lệ!');
+        return;
+      }
+      if (!password || password.length < 6) {
+        showToast('⚠️ Mật khẩu phải có tối thiểu 6 ký tự!');
+        return;
+      }
+
+      try {
+        btnAuthSubmit.disabled = true;
+        btnAuthSubmit.textContent = 'Đang xử lý...';
+
+        if (authMode === 'register') {
+          await firebaseAuth.createUserWithEmailAndPassword(email, password);
+          showToast('🎉 Đăng ký thành công và đã bắt đầu đồng bộ!');
+        } else {
+          await firebaseAuth.signInWithEmailAndPassword(email, password);
+          showToast('✅ Đăng nhập thành công!');
+        }
+        document.getElementById('dialog-auth-backdrop').style.display = 'none';
+      } catch (err) {
+        console.error('Auth error:', err);
+        let msg = err.message;
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+          msg = 'Email hoặc mật khẩu chưa chính xác!';
+        } else if (err.code === 'auth/email-already-in-use') {
+          msg = 'Email này đã được đăng ký! Vui lòng chọn Đăng nhập.';
+        }
+        showToast(`❌ ${msg}`);
+      } finally {
+        btnAuthSubmit.disabled = false;
+        btnAuthSubmit.textContent = authMode === 'register' ? 'Đăng ký & Đồng bộ' : 'Đăng nhập';
+      }
+    });
+  }
+
+  // Nút Đồng bộ thủ công
+  const btnManualSync = document.getElementById('btn-manual-sync');
+  if (btnManualSync) {
+    btnManualSync.addEventListener('click', async () => {
+      if (currentUser) {
+        await syncToCloud();
+        showToast('☁️ Đã đồng bộ dữ liệu mới nhất lên đám mây!');
+      }
+    });
+  }
+
+  // Nút Đăng xuất
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+      if (confirm('Bạn có muốn đăng xuất khỏi tài khoản này không? Dữ liệu trên điện thoại vẫn được giữ nguyên.')) {
+        await firebaseAuth.signOut();
+        showToast('Đã đăng xuất tài khoản!');
+      }
+    });
+  }
+}
+
+function openAuthModal(noticeText) {
+  const modal = document.getElementById('dialog-auth-backdrop');
+  const desc = document.getElementById('auth-modal-desc');
+  const emailInput = document.getElementById('auth-input-email');
+  if (noticeText && desc) {
+    desc.textContent = noticeText;
+  }
+  const savedEmail = localStorage.getItem('user_backup_email');
+  if (savedEmail && emailInput && !emailInput.value) {
+    emailInput.value = savedEmail;
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+// =========================================================
 // KHỞI ĐỘNG ỨNG DỤNG
 // =========================================================
 
@@ -1146,4 +1459,5 @@ document.addEventListener('DOMContentLoaded', () => {
   loadData();
   setupEventListeners();
   renderApp();
+  initFirebase();
 });
