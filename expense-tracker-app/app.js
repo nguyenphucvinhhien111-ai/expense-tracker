@@ -825,6 +825,49 @@ function setupEventListeners() {
   document.getElementById('btn-export-json').addEventListener('click', exportBackupJson);
   document.getElementById('btn-export-quick').addEventListener('click', exportBackupJson);
 
+  // Xem trước mã sao lưu JSON
+  const previewJsonBackdrop = document.getElementById('dialog-preview-json-backdrop');
+  const textPreviewJson = document.getElementById('text-preview-json');
+  const previewJsonCount = document.getElementById('preview-json-count');
+  const btnPreviewJson = document.getElementById('btn-preview-json');
+
+  if (btnPreviewJson) {
+    btnPreviewJson.addEventListener('click', () => {
+      const backupData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        initialBalance: State.initialBalance,
+        transactions: State.transactions
+      };
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      if (textPreviewJson) textPreviewJson.value = jsonStr;
+      if (previewJsonCount) previewJsonCount.textContent = `${State.transactions.length} giao dịch`;
+      if (previewJsonBackdrop) previewJsonBackdrop.style.display = 'flex';
+    });
+  }
+
+  document.getElementById('btn-close-preview-json')?.addEventListener('click', () => {
+    if (previewJsonBackdrop) previewJsonBackdrop.style.display = 'none';
+  });
+
+  document.getElementById('btn-copy-preview-json')?.addEventListener('click', () => {
+    if (!textPreviewJson) return;
+    const textToCopy = textPreviewJson.value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast('📋 Đã sao chép mã JSON vào bộ nhớ tạm!');
+      }).catch(() => {
+        textPreviewJson.select();
+        document.execCommand('copy');
+        showToast('📋 Đã sao chép mã JSON vào bộ nhớ tạm!');
+      });
+    } else {
+      textPreviewJson.select();
+      document.execCommand('copy');
+      showToast('📋 Đã sao chép mã JSON vào bộ nhớ tạm!');
+    }
+  });
+
   // Xuất file Excel (CSV)
   document.getElementById('btn-export-csv').addEventListener('click', exportCsv);
 

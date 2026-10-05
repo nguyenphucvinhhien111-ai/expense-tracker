@@ -1,10 +1,15 @@
 package com.sothuchi.app;
 
 import android.content.ActivityNotFoundException;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -16,6 +21,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
     private WebView webView;
@@ -38,10 +45,42 @@ public class MainActivity extends AppCompatActivity {
         public void shareFile(String fileName, String content) {
             runOnUiThread(() -> {
                 try {
+                    String mimeType = fileName.endsWith(".csv") ? "text/csv" : "application/json";
+
+                    // 1. Lưu trực tiếp vào thư mục công khai Tải về (Downloads) của máy
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            ContentValues values = new ContentValues();
+                            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                            Uri downloadUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                            if (downloadUri != null) {
+                                try (OutputStream os = getContentResolver().openOutputStream(downloadUri)) {
+                                    if (os != null) {
+                                        os.write(content.getBytes(StandardCharsets.UTF_8));
+                                    }
+                                }
+                            }
+                        } else {
+                            File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                            if (!downloadDir.exists()) downloadDir.mkdirs();
+                            File publicFile = new File(downloadDir, fileName);
+                            try (FileOutputStream fos = new FileOutputStream(publicFile)) {
+                                fos.write(content.getBytes(StandardCharsets.UTF_8));
+                            }
+                            MediaScannerConnection.scanFile(context, new String[]{ publicFile.getAbsolutePath() }, null, null);
+                        }
+                        Toast.makeText(context, "✅ Đã lưu file vào mục Tải về (Download)!", Toast.LENGTH_SHORT).show();
+                    } catch (Exception err) {
+                        err.printStackTrace();
+                    }
+
+                    // 2. Đồng thời lưu vào cache riêng để mở bảng chia sẻ (Zalo, Drive, Gmail...)
                     File file = new File(getExternalFilesDir(null), fileName);
-                    FileOutputStream fos = new FileOutputStream(file);
-                    fos.write(content.getBytes("UTF-8"));
-                    fos.close();
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    }
 
                     Uri uri = FileProvider.getUriForFile(
                         context,
@@ -50,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
                     );
 
                     Intent intent = new Intent(Intent.ACTION_SEND);
-                    intent.setType("text/*");
+                    intent.setType(mimeType);
                     intent.putExtra(Intent.EXTRA_STREAM, uri);
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(intent, "Lưu hoặc chia sẻ file sao lưu"));

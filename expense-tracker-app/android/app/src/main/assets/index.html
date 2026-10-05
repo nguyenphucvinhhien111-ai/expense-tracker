@@ -284,7 +284,10 @@
                 <span class="setting-name">Xuất file sao lưu (JSON)</span>
                 <span class="setting-desc">Tải dữ liệu về máy để cất giữ hoặc đổi điện thoại</span>
               </div>
-              <button class="setting-action-btn primary" id="btn-export-json">Tải về</button>
+              <div style="display: flex; gap: 8px;">
+                <button class="setting-action-btn" id="btn-preview-json">Xem mã</button>
+                <button class="setting-action-btn primary" id="btn-export-json">Tải về</button>
+              </div>
             </div>
 
             <div class="setting-item">
@@ -441,6 +444,22 @@
           <div class="dialog-buttons">
             <button class="dialog-btn secondary" id="btn-cancel-init-balance">Hủy</button>
             <button class="dialog-btn primary" id="btn-confirm-init-balance">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: PREVIEW JSON EXPORT -->
+      <div class="modal-dialog-backdrop" id="dialog-preview-json-backdrop" style="display: none;">
+        <div class="modal-dialog" style="max-width: 420px; width: 90%;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h4 class="dialog-title" style="margin: 0;">Mã sao lưu hiện tại (JSON)</h4>
+            <span id="preview-json-count" style="font-size: 0.75rem; background: var(--surface-secondary); padding: 2px 8px; border-radius: 12px; color: var(--text-secondary); font-weight: 600;"></span>
+          </div>
+          <p class="dialog-desc" style="margin-bottom: 10px; font-size: 0.8rem;">Dưới đây là toàn bộ dữ liệu đang lưu trong máy của bạn (hoàn toàn không có dữ liệu mẫu):</p>
+          <textarea id="text-preview-json" class="form-input" rows="8" readonly style="width: 100%; font-family: monospace; font-size: 0.75rem; line-height: 1.4; margin-bottom: 14px; padding: 10px; border-radius: 8px; resize: vertical; box-sizing: border-box; background: var(--surface-secondary); color: var(--text-primary);"></textarea>
+          <div class="dialog-buttons">
+            <button class="dialog-btn secondary" id="btn-close-preview-json">Đóng</button>
+            <button class="dialog-btn primary" id="btn-copy-preview-json">📋 Sao chép mã</button>
           </div>
         </div>
       </div>
