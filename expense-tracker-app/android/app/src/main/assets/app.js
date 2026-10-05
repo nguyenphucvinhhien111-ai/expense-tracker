@@ -880,6 +880,17 @@ function setupEventListeners() {
     }
   });
 
+  // Sao lưu qua Email
+  const inputBackupEmail = document.getElementById('input-backup-email');
+  const btnSendEmailBackup = document.getElementById('btn-send-email-backup');
+  if (inputBackupEmail) {
+    inputBackupEmail.value = localStorage.getItem('user_backup_email') || '';
+  }
+  if (btnSendEmailBackup) {
+    btnSendEmailBackup.addEventListener('click', sendEmailBackup);
+  }
+  updateLastBackupUI();
+
   // Xóa toàn bộ dữ liệu
   document.getElementById('btn-reset-all').addEventListener('click', () => {
     if (confirm('⚠️ Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu thu chi không? Dữ liệu đã xóa sẽ không thể phục hồi trừ khi bạn đã sao lưu!')) {
@@ -915,6 +926,77 @@ function changeMonth(delta) {
 // =========================================================
 // SAO LƯU & KHÔI PHỤC DỮ LIỆU
 // =========================================================
+
+function updateLastBackupUI() {
+  const lastBackupText = document.getElementById('last-backup-text');
+  if (!lastBackupText) return;
+  const lastTime = localStorage.getItem('last_backup_time');
+  if (lastTime) {
+    try {
+      const dt = new Date(lastTime);
+      const timeStr = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')} ngày ${dt.getDate()}/${dt.getMonth() + 1}/${dt.getFullYear()}`;
+      lastBackupText.textContent = `Lần gửi gần nhất: ${timeStr}`;
+    } catch (e) {
+      lastBackupText.textContent = 'Lần gửi gần nhất: Đã sao lưu';
+    }
+  } else {
+    lastBackupText.textContent = 'Lần gửi gần nhất: Chưa sao lưu';
+  }
+}
+
+function sendEmailBackup() {
+  const emailInput = document.getElementById('input-backup-email');
+  const email = (emailInput ? emailInput.value : '').trim();
+
+  if (!email || !email.includes('@')) {
+    showToast('⚠️ Vui lòng nhập địa chỉ email hợp lệ!');
+    if (emailInput) emailInput.focus();
+    return;
+  }
+
+  // Lưu lại email để các lần sau không cần nhập lại
+  localStorage.setItem('user_backup_email', email);
+
+  const backupData = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    initialBalance: State.initialBalance,
+    transactions: State.transactions
+  };
+
+  const jsonStr = JSON.stringify(backupData, null, 2);
+  const nowStr = getNowDateString();
+  const fileName = `so-thu-chi-backup-${nowStr}.json`;
+
+  const totalInc = State.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totalExp = State.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const currentBal = State.initialBalance + totalInc - totalExp;
+
+  const subject = `[Sổ Thu Chi] Bản sao lưu dữ liệu ngày ${nowStr}`;
+  const bodyText = `Xin chào,\n\nĐây là bản sao lưu dữ liệu Sổ Thu Chi cá nhân của bạn.\n\n📊 TÓM TẮT TÀI CHÍNH:\n- Số dư hiện tại: ${formatVND(currentBal)}\n- Tổng thu: ${formatVND(totalInc)}\n- Tổng chi: ${formatVND(totalExp)}\n- Số lượng giao dịch: ${State.transactions.length}\n- Thời gian sao lưu: ${new Date().toLocaleString('vi-VN')}\n\n📁 Tệp đính kèm "${fileName}" chứa đầy đủ dữ liệu định dạng JSON. Khi cần đổi máy hoặc cài lại ứng dụng, bạn chỉ cần tải tệp này về máy và chọn "Khôi phục dữ liệu từ file" trong app là xong!\n`;
+
+  localStorage.setItem('last_backup_time', new Date().toISOString());
+  updateLastBackupUI();
+
+  if (window.AndroidBridge && window.AndroidBridge.sendBackupEmail) {
+    window.AndroidBridge.sendBackupEmail(email, subject, bodyText, fileName, jsonStr);
+    showToast('📧 Đang mở Gmail để gửi sao lưu...');
+    return;
+  }
+
+  // Fallback dành cho trình duyệt web / PWA
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText + '\n(Lưu ý: File sao lưu JSON đã được tải về máy của bạn, vui lòng đính kèm file đó vào email này)')}`;
+  window.open(mailtoUrl, '_blank');
+  showToast('💾 Đã tải file sao lưu và mở email!');
+}
 
 function exportBackupJson() {
   const backupData = {

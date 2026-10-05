@@ -59,6 +59,43 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void sendBackupEmail(String email, String subject, String body, String fileName, String content) {
+            runOnUiThread(() -> {
+                try {
+                    File file = new File(getExternalFilesDir(null), fileName);
+                    FileOutputStream fos = new FileOutputStream(file);
+                    fos.write(content.getBytes("UTF-8"));
+                    fos.close();
+
+                    Uri uri = FileProvider.getUriForFile(
+                        context,
+                        getApplicationContext().getPackageName() + ".provider",
+                        file
+                    );
+
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("message/rfc822");
+                    if (email != null && !email.trim().isEmpty()) {
+                        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{ email.trim() });
+                    }
+                    intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+                    intent.putExtra(Intent.EXTRA_TEXT, body);
+                    intent.putExtra(Intent.EXTRA_STREAM, uri);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                    try {
+                        startActivity(Intent.createChooser(intent, "Gửi sao lưu qua Email"));
+                    } catch (ActivityNotFoundException ex) {
+                        intent.setType("text/*");
+                        startActivity(Intent.createChooser(intent, "Gửi sao lưu qua Email"));
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(context, "Lỗi khi mở Email: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
+        }
     }
 
     @Override
