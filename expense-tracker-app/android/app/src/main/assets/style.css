@@ -241,11 +241,6 @@ body.theme-light .setting-action-btn.primary {
   border: none;
 }
 
-body.theme-light .email-backup-card {
-  background: rgba(99, 102, 241, 0.05) !important;
-  border-color: rgba(99, 102, 241, 0.2) !important;
-}
-
 body.theme-light .stats-overview-box {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.07);
