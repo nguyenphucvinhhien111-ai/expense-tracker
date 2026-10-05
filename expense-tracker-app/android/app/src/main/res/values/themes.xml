@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.SoThuChi" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">#090d16</item>
+        <item name="android:navigationBarColor">#090d16</item>
+        <item name="android:windowBackground">#090d16</item>
+    </style>
+</resources>

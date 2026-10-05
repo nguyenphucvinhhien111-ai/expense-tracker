@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sổ Thu Chi - Quản Lý Chi Tiêu Cá Nhân</title>
+  <meta name="description" content="Ứng dụng quản lý thu chi cá nhân đơn giản, lưu trên máy, bảo mật tuyệt đối, xem chi tiêu theo tháng.">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sổ Thu Chi">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <div class="app-viewport">
+    <div class="mobile-container" id="app">
+      <!-- HEADER -->
+      <header class="app-header">
+        <div class="header-top">
+          <div class="user-greeting">
+            <span class="greeting-subtitle" id="current-day-label">Hôm nay</span>
+            <h1 class="greeting-title">Sổ Thu Chi</h1>
+          </div>
+          <div class="header-actions">
+            <button class="icon-btn" id="btn-theme-toggle" title="Đổi giao diện Sáng/Tối" aria-label="Đổi giao diện">
+              <span class="icon" id="theme-icon">🌙</span>
+            </button>
+            <button class="icon-btn" id="btn-export-quick" title="Sao lưu nhanh dữ liệu" aria-label="Sao lưu">
+              <span class="icon">💾</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- MONTH SELECTOR -->
+        <div class="month-selector-bar">
+          <button class="nav-arrow-btn" id="prev-month-btn" aria-label="Tháng trước">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="month-display" id="month-display-btn">
+            <span class="calendar-icon">📅</span>
+            <span id="current-month-text" class="month-text">Tháng 10 / 2026</span>
+          </div>
+          <button class="nav-arrow-btn" id="next-month-btn" aria-label="Tháng sau">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <button class="today-chip-btn" id="today-chip-btn">Hôm nay</button>
+        </div>
+      </header>
+
+      <!-- MAIN CONTENT VIEW AREA -->
+      <main class="app-main">
+        <!-- VIEW 1: HOME (SỔ THU CHI) -->
+        <section id="view-home" class="app-view active">
+          <!-- FINANCIAL BALANCE CARD -->
+          <div class="balance-card">
+            <div class="balance-card-glow"></div>
+            <div class="balance-top">
+              <span class="balance-label">Tổng số dư khả dụng</span>
+              <button class="balance-eye-btn" id="btn-toggle-balance-privacy" title="Ẩn/Hiện số tiền">
+                <span id="balance-eye-icon">👁️</span>
+              </button>
+            </div>
+            <div class="balance-amount-wrapper">
+              <h2 class="balance-amount" id="total-balance-display">0 <span class="currency-symbol">₫</span></h2>
+            </div>
+            
+            <div class="balance-divider"></div>
+
+            <div class="month-stats-grid">
+              <div class="stat-col income-stat">
+                <div class="stat-header">
+                  <span class="stat-indicator-dot green"></span>
+                  <span class="stat-title">Thu tháng này</span>
+                </div>
+                <div class="stat-val green-text" id="month-income-display">+ 0 ₫</div>
+              </div>
+              <div class="stat-v-sep"></div>
+              <div class="stat-col expense-stat">
+                <div class="stat-header">
+                  <span class="stat-indicator-dot red"></span>
+                  <span class="stat-title">Chi tháng này</span>
+                </div>
+                <div class="stat-val red-text" id="month-expense-display">- 0 ₫</div>
+              </div>
+            </div>
+
+            <div class="month-net-badge" id="month-net-badge">
+              <span>Còn lại tháng này: </span>
+              <strong id="month-net-display">0 ₫</strong>
+            </div>
+          </div>
+
+          <!-- BIG FAST ACTION BUTTONS -->
+          <div class="quick-action-row">
+            <button class="hero-action-btn income-btn" id="btn-quick-income">
+              <div class="btn-icon-circle green-bg">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </div>
+              <div class="btn-texts">
+                <span class="btn-primary-text">Nhận Tiền</span>
+                <span class="btn-sub-text">Cộng thu nhập</span>
+              </div>
+            </button>
+
+            <button class="hero-action-btn expense-btn" id="btn-quick-expense">
+              <div class="btn-icon-circle red-bg">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </div>
+              <div class="btn-texts">
+                <span class="btn-primary-text">Chi Tiền</span>
+                <span class="btn-sub-text">Trừ chi tiêu</span>
+              </div>
+            </button>
+          </div>
+
+          <!-- TRANSACTIONS SECTION -->
+          <div class="transactions-section">
+            <div class="section-header-row">
+              <div class="title-with-count">
+                <h3 class="section-title">Lịch sử thu chi</h3>
+                <span class="count-badge" id="tx-count-badge">0</span>
+              </div>
+              <!-- Quick Filter Pills -->
+              <div class="filter-pills">
+                <button class="filter-pill active" data-filter="all">Tất cả</button>
+                <button class="filter-pill" data-filter="expense">Chi</button>
+                <button class="filter-pill" data-filter="income">Thu</button>
+              </div>
+            </div>
+
+            <!-- SEARCH BAR -->
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="search-input" placeholder="Tìm kiếm khoản chi, thu, ghi chú..." />
+              <button class="clear-search-btn" id="clear-search-btn" style="display: none;">✕</button>
+            </div>
+
+            <!-- TRANSACTIONS LIST CONTAINER -->
+            <div class="tx-list-container" id="tx-list-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: STATISTICS (THỐNG KÊ CHI TIÊU) -->
+        <section id="view-stats" class="app-view">
+          <div class="stats-card">
+            <h3 class="stats-heading">Phân tích tháng <span id="stats-month-label">10/2026</span></h3>
+            
+            <div class="stats-overview-box">
+              <div class="stats-row">
+                <span>Tổng chi tiêu:</span>
+                <strong class="red-text" id="stats-total-expense">0 ₫</strong>
+              </div>
+              <div class="stats-row">
+                <span>Tổng thu vào:</span>
+                <strong class="green-text" id="stats-total-income">0 ₫</strong>
+              </div>
+              <div class="stats-row highlight">
+                <span>Tỷ lệ tiết kiệm:</span>
+                <strong id="stats-saving-rate">0%</strong>
+              </div>
+            </div>
+
+            <!-- Spending Breakdown by Category -->
+            <div class="breakdown-section">
+              <h4 class="breakdown-title">Chi tiết theo danh mục</h4>
+              <div id="stats-category-list" class="stats-category-list">
+                <!-- Rendered via JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: SETTINGS & BACKUP (CÀI ĐẶT & SAO LƯU) -->
+        <section id="view-settings" class="app-view">
+          <div class="settings-group">
+            <h3 class="settings-group-title">Thiết lập ví</h3>
+            
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name">Số dư ban đầu</span>
+                <span class="setting-desc">Số tiền sẵn có trong ví trước khi ghi chép</span>
+              </div>
+              <button class="setting-action-btn" id="btn-set-initial-balance">Chỉnh sửa</button>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name">Đơn vị tiền tệ</span>
+                <span class="setting-desc">Đồng Việt Nam (VND - ₫)</span>
+              </div>
+              <span class="setting-badge">VND</span>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3 class="settings-group-title">Sao lưu & Bảo vệ dữ liệu</h3>
+            <p class="settings-note">💡 Tất cả dữ liệu được lưu an toàn 100% trong bộ nhớ máy của bạn, không gửi lên bất kỳ máy chủ nào.</p>
+            
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name">Xuất file sao lưu (JSON)</span>
+                <span class="setting-desc">Tải dữ liệu về máy để cất giữ hoặc đổi điện thoại</span>
+              </div>
+              <button class="setting-action-btn primary" id="btn-export-json">Tải về</button>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name">Xuất ra Excel (CSV)</span>
+                <span class="setting-desc">Xem bảng tính chi tiết thu chi trên máy tính</span>
+              </div>
+              <button class="setting-action-btn" id="btn-export-csv">Xuất CSV</button>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name">Khôi phục dữ liệu từ file</span>
+                <span class="setting-desc">Nhập lại file sao lưu JSON đã tải trước đó</span>
+              </div>
+              <button class="setting-action-btn" id="btn-trigger-import">Chọn file</button>
+              <input type="file" id="file-import-input" accept=".json" style="display: none;" />
+            </div>
+          </div>
+
+          <div class="settings-group danger-zone">
+            <h3 class="settings-group-title text-danger">Vùng nguy hiểm</h3>
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-name text-danger">Xóa toàn bộ dữ liệu</span>
+                <span class="setting-desc">Xóa trắng tất cả ghi chép và đưa về ban đầu</span>
+              </div>
+              <button class="setting-action-btn danger" id="btn-reset-all">Xóa hết</button>
+            </div>
+          </div>
+
+          <!-- PWA INSTALL GUIDE -->
+          <div class="pwa-install-banner" id="pwa-install-banner">
+            <div class="pwa-banner-icon">📲</div>
+            <div class="pwa-banner-content">
+              <strong>Cài đặt vào điện thoại</strong>
+              <span>Mở như ứng dụng thật, dùng không cần mạng internet.</span>
+            </div>
+            <button class="pwa-install-btn" id="btn-install-pwa">Cài đặt</button>
+          </div>
+
+          <div class="app-version-footer">
+            <span>Sổ Thu Chi Cá Nhân • Phiên bản 1.0.0</span>
+            <small>Lưu trữ nội bộ an toàn & riêng tư</small>
+          </div>
+        </section>
+      </main>
+
+      <!-- BOTTOM NAVIGATION BAR -->
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-view="view-home" id="nav-btn-home">
+          <span class="nav-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          </span>
+          <span class="nav-label">Thu Chi</span>
+        </button>
+
+        <!-- Floating Add Center Button -->
+        <button class="nav-fab-btn" id="btn-fab-add" aria-label="Thêm khoản thu chi">
+          <div class="fab-circle">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </div>
+        </button>
+
+        <button class="nav-item" data-view="view-stats" id="nav-btn-stats">
+          <span class="nav-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          </span>
+          <span class="nav-label">Thống kê</span>
+        </button>
+
+        <button class="nav-item" data-view="view-settings" id="nav-btn-settings">
+          <span class="nav-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </span>
+          <span class="nav-label">Cài đặt</span>
+        </button>
+      </nav>
+
+      <!-- BOTTOM SHEET MODAL: ADD / EDIT TRANSACTION -->
+      <div class="bottom-sheet-backdrop" id="modal-backdrop"></div>
+      <div class="bottom-sheet" id="modal-tx">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title" id="sheet-title">Thêm Giao Dịch Mới</h3>
+          <button class="sheet-close-btn" id="modal-close-btn" aria-label="Đóng">&times;</button>
+        </div>
+
+        <div class="sheet-body">
+          <!-- TYPE SWITCHER -->
+          <div class="tx-type-toggle">
+            <button class="type-btn expense-toggle active" id="btn-type-expense" type="button">
+              <span class="type-dot red"></span> Chi Tiêu
+            </button>
+            <button class="type-btn income-toggle" id="btn-type-income" type="button">
+              <span class="type-dot green"></span> Thu Nhập
+            </button>
+          </div>
+
+          <!-- AMOUNT INPUT -->
+          <div class="form-group amount-group">
+            <label class="form-label">Số tiền (VNĐ)</label>
+            <div class="amount-input-box">
+              <input type="text" inputmode="numeric" id="input-amount" placeholder="0" class="amount-field" autocomplete="off" />
+              <span class="amount-suffix">₫</span>
+            </div>
+            <!-- QUICK AMOUNT PILLS -->
+            <div class="quick-amounts-bar">
+              <button type="button" class="quick-amt-chip" data-add="10000">+10k</button>
+              <button type="button" class="quick-amt-chip" data-add="20000">+20k</button>
+              <button type="button" class="quick-amt-chip" data-add="50000">+50k</button>
+              <button type="button" class="quick-amt-chip" data-add="100000">+100k</button>
+              <button type="button" class="quick-amt-chip" data-add="200000">+200k</button>
+              <button type="button" class="quick-amt-chip" data-add="500000">+500k</button>
+              <button type="button" class="quick-amt-chip" data-add="1000000">+1tr</button>
+              <button type="button" class="quick-amt-chip" data-add="2000000">+2tr</button>
+              <button type="button" class="quick-amt-chip clear-amt" id="btn-clear-amount">Xóa</button>
+            </div>
+          </div>
+
+          <!-- CATEGORY SELECTOR -->
+          <div class="form-group">
+            <label class="form-label">Chọn danh mục</label>
+            <div class="categories-grid" id="categories-grid">
+              <!-- Rendered via JS based on type -->
+            </div>
+          </div>
+
+          <!-- NOTE (OPTIONAL) -->
+          <div class="form-group">
+            <label class="form-label">Ghi chú (Tùy chọn)</label>
+            <input type="text" id="input-note" class="form-input" placeholder="Ví dụ: Ăn sáng phở bò, đổ xăng xe, lương tháng..." />
+          </div>
+
+          <!-- DATE SELECTOR -->
+          <div class="form-group">
+            <label class="form-label">Ngày giao dịch</label>
+            <input type="date" id="input-date" class="form-input" />
+          </div>
+
+          <!-- SUBMIT BUTTON -->
+          <div class="modal-actions">
+            <button type="button" class="btn-submit" id="btn-save-tx">
+              <span id="submit-btn-text">Lưu Khoản Chi</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: SET INITIAL BALANCE -->
+      <div class="modal-dialog-backdrop" id="dialog-balance-backdrop" style="display: none;">
+        <div class="modal-dialog">
+          <h4 class="dialog-title">Đặt số dư ban đầu</h4>
+          <p class="dialog-desc">Nhập số tiền hiện có trong tài khoản hoặc ví của bạn để bắt đầu tính toán chính xác:</p>
+          <div class="amount-input-box dialog-input-box">
+            <input type="text" inputmode="numeric" id="input-init-balance" class="amount-field" placeholder="0" />
+            <span class="amount-suffix">₫</span>
+          </div>
+          <div class="dialog-buttons">
+            <button class="dialog-btn secondary" id="btn-cancel-init-balance">Hủy</button>
+            <button class="dialog-btn primary" id="btn-confirm-init-balance">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOAST NOTIFICATION -->
+      <div class="toast-message" id="toast"></div>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
