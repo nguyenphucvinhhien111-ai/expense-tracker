@@ -20,6 +20,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Accept Android SDK licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
       - name: Locate Android directory
         id: locate-dir
         run: |
@@ -41,9 +45,10 @@ jobs:
 
       - name: Build Debug APK
         working-directory: ${{ steps.locate-dir.outputs.dir }}
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: SoThuChi-Debug-APK
