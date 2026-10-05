@@ -330,6 +330,8 @@ html, body {
 
 .balance-amount-wrapper {
   margin-bottom: 14px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .balance-amount {
@@ -340,6 +342,8 @@ html, body {
   display: flex;
   align-items: baseline;
   gap: 4px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .balance-amount .currency-symbol {

@@ -35,7 +35,7 @@ const State = {
   currentYearMonth: '', // Format 'YYYY-MM'
   filterType: 'all',    // 'all' | 'expense' | 'income'
   searchQuery: '',
-  isBalanceHidden: false,
+  isBalanceHidden: true, // MẶC ĐỊNH KHI VÀO APP LÀ ẨN TIỀN
   modalType: 'expense', // 'expense' | 'income'
   selectedCategory: null,
   activeView: 'view-home'
@@ -107,17 +107,26 @@ function loadData() {
     const rawTx = localStorage.getItem(STORAGE_KEY_TX);
     const rawInit = localStorage.getItem(STORAGE_KEY_INIT);
 
-    if (rawTx) {
+    if (rawTx !== null) {
       State.transactions = JSON.parse(rawTx);
     } else {
-      // Dữ liệu mẫu khởi tạo ban đầu để người dùng dễ hình dung
-      initSampleData();
+      State.transactions = [];
     }
 
     if (rawInit !== null) {
       State.initialBalance = Number(rawInit) || 0;
     } else {
-      State.initialBalance = 2000000; // Mặc định 2 triệu
+      State.initialBalance = 0;
+    }
+
+    // Loại bỏ triệt để các dữ liệu mẫu ban đầu nếu còn lưu trong máy của người dùng
+    const originalLen = State.transactions.length;
+    State.transactions = State.transactions.filter(t => !t.id || !String(t.id).startsWith('tx_init_'));
+    if (State.transactions.length !== originalLen) {
+      if (State.initialBalance === 2000000 && State.transactions.length === 0) {
+        State.initialBalance = 0;
+      }
+      saveDataLocally();
     }
   } catch (err) {
     console.error('Lỗi khi đọc dữ liệu:', err);
@@ -140,55 +149,6 @@ function saveDataLocally() {
   } catch (err) {
     console.error('Lỗi khi lưu dữ liệu:', err);
   }
-}
-
-function initSampleData() {
-  const today = getNowDateString();
-  const ym = getNowYearMonth();
-  
-  State.transactions = [
-    {
-      id: 'tx_init_1',
-      type: 'income',
-      amount: 15000000,
-      category: 'Tiền lương',
-      categoryIcon: '💵',
-      note: 'Nhận lương tháng',
-      date: `${ym}-01`,
-      createdAt: Date.now() - 86400000 * 2
-    },
-    {
-      id: 'tx_init_2',
-      type: 'expense',
-      amount: 45000,
-      category: 'Ăn uống',
-      categoryIcon: '🍜',
-      note: 'Ăn trưa bún bò',
-      date: today,
-      createdAt: Date.now() - 3600000 * 4
-    },
-    {
-      id: 'tx_init_3',
-      type: 'expense',
-      amount: 30000,
-      category: 'Cà phê & nước',
-      categoryIcon: '☕',
-      note: 'Cà phê sữa đá',
-      date: today,
-      createdAt: Date.now() - 3600000 * 2
-    },
-    {
-      id: 'tx_init_4',
-      type: 'expense',
-      amount: 80000,
-      category: 'Xăng & đi lại',
-      categoryIcon: '🛵',
-      note: 'Đổ xăng xe máy đầy bình',
-      date: today,
-      createdAt: Date.now() - 1800000
-    }
-  ];
-  saveData();
 }
 
 // =========================================================
@@ -256,12 +216,19 @@ function renderBalanceCard() {
   const monthIncomeEl = document.getElementById('month-income-display');
   const monthExpenseEl = document.getElementById('month-expense-display');
   const monthNetEl = document.getElementById('month-net-display');
+  const eyeIcon = document.getElementById('balance-eye-icon');
+
+  if (eyeIcon) {
+    eyeIcon.textContent = State.isBalanceHidden ? '🙈' : '👁️';
+    eyeIcon.title = State.isBalanceHidden ? 'Nhấn để xem số tiền' : 'Nhấn để ẩn số tiền';
+  }
 
   if (State.isBalanceHidden) {
     totalBalanceEl.innerHTML = `•••••••• <span class="currency-symbol">₫</span>`;
     monthIncomeEl.textContent = `+ •••••• ₫`;
     monthExpenseEl.textContent = `- •••••• ₫`;
     monthNetEl.textContent = `•••••• ₫`;
+    monthNetEl.style.color = 'var(--text-muted)';
   } else {
     totalBalanceEl.innerHTML = `${formatCurrency(overallBalance)} <span class="currency-symbol">₫</span>`;
     monthIncomeEl.textContent = `+ ${formatCurrency(monthIncome)} ₫`;
@@ -359,7 +326,9 @@ function renderTransactionList() {
 
     // Hiển thị tóm tắt ngày
     let daySummaryText = '';
-    if (dayExpense > 0 && dayIncome > 0) {
+    if (State.isBalanceHidden) {
+      daySummaryText = `<span style="letter-spacing:1px;font-weight:700;color:var(--text-muted);">••••••</span>`;
+    } else if (dayExpense > 0 && dayIncome > 0) {
       daySummaryText = `<span class="green-text">+${formatCurrency(dayIncome)}</span> / <span class="red-text">-${formatCurrency(dayExpense)}</span>`;
     } else if (dayExpense > 0) {
       daySummaryText = `<span class="red-text">Chi: -${formatCurrency(dayExpense)} ₫</span>`;
@@ -380,6 +349,7 @@ function renderTransactionList() {
       const isIncome = tx.type === 'income';
       const sign = isIncome ? '+' : '-';
       const amountClass = isIncome ? 'income' : 'expense';
+      const amountDisplay = State.isBalanceHidden ? `${sign} •••••• ₫` : `${sign} ${formatCurrency(tx.amount)} ₫`;
 
       html += `
         <div class="tx-item" data-id="${tx.id}">
@@ -391,7 +361,7 @@ function renderTransactionList() {
             </div>
           </div>
           <div class="tx-right">
-            <span class="tx-amount ${amountClass}">${sign} ${formatCurrency(tx.amount)} ₫</span>
+            <span class="tx-amount ${amountClass}">${amountDisplay}</span>
             <button class="tx-actions-btn btn-delete-tx" data-id="${tx.id}" title="Xóa giao dịch này" aria-label="Xóa">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
@@ -450,8 +420,8 @@ function renderStatsView() {
     }
   });
 
-  document.getElementById('stats-total-expense').textContent = `${formatCurrency(totalExpense)} ₫`;
-  document.getElementById('stats-total-income').textContent = `+${formatCurrency(totalIncome)} ₫`;
+  document.getElementById('stats-total-expense').textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(totalExpense)} ₫`;
+  document.getElementById('stats-total-income').textContent = State.isBalanceHidden ? '+•••••• ₫' : `+${formatCurrency(totalIncome)} ₫`;
 
   // Tỷ lệ tiết kiệm = ((Thu - Chi) / Thu) * 100%
   let savingRate = 0;
@@ -459,7 +429,7 @@ function renderStatsView() {
     savingRate = Math.round(((totalIncome - totalExpense) / totalIncome) * 100);
   }
   const savingEl = document.getElementById('stats-saving-rate');
-  savingEl.textContent = `${savingRate}%`;
+  savingEl.textContent = State.isBalanceHidden ? '••%' : `${savingRate}%`;
   savingEl.style.color = savingRate >= 0 ? 'var(--income-green)' : 'var(--expense-red)';
 
   // Danh sách danh mục chi
@@ -480,6 +450,7 @@ function renderStatsView() {
   categoriesArray.forEach((item, index) => {
     const pct = totalExpense > 0 ? Math.round((item.amount / totalExpense) * 100) : 0;
     const barColor = colors[index % colors.length];
+    const catAmountDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(item.amount)} ₫`;
 
     catHtml += `
       <div class="stat-cat-row">
@@ -489,7 +460,7 @@ function renderStatsView() {
             <span>${item.name}</span>
           </span>
           <div class="stat-cat-values">
-            <span class="stat-cat-amount">${formatCurrency(item.amount)} ₫</span>
+            <span class="stat-cat-amount">${catAmountDisplay}</span>
             <span class="stat-cat-pct">(${pct}%)</span>
           </div>
         </div>
@@ -781,13 +752,20 @@ function setupEventListeners() {
     renderTransactionList();
   });
 
-  // Ẩn / Hiện số dư (Eye toggle)
-  document.getElementById('btn-toggle-balance-privacy').addEventListener('click', () => {
+  // Ẩn / Hiện số dư (Eye toggle & Click trực tiếp vào số tiền)
+  const toggleBalancePrivacy = () => {
     State.isBalanceHidden = !State.isBalanceHidden;
-    const eyeIcon = document.getElementById('balance-eye-icon');
-    eyeIcon.textContent = State.isBalanceHidden ? '🙈' : '👁️';
     renderBalanceCard();
-  });
+    renderTransactionList();
+    if (State.activeView === 'view-stats') {
+      renderStatsView();
+    }
+    showToast(State.isBalanceHidden ? '🙈 Đã ẩn thông tin tiền' : '👁️ Đã hiển thị số tiền');
+  };
+
+  document.getElementById('btn-toggle-balance-privacy')?.addEventListener('click', toggleBalancePrivacy);
+  document.getElementById('total-balance-display')?.addEventListener('click', toggleBalancePrivacy);
+  document.querySelector('.balance-amount-wrapper')?.addEventListener('click', toggleBalancePrivacy);
 
   // Đổi giao diện Sáng / Tối
   const themeToggleBtn = document.getElementById('btn-theme-toggle');
@@ -972,15 +950,17 @@ function sendEmailBackup() {
   };
 
   const jsonStr = JSON.stringify(backupData, null, 2);
-  const nowStr = getNowDateString();
-  const fileName = `so-thu-chi-backup-${nowStr}.json`;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const timeStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}h${pad(now.getMinutes())}m${pad(now.getSeconds())}s`;
+  const fileName = `so-thu-chi-backup-${timeStamp}.json`;
 
   const totalInc = State.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExp = State.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const currentBal = State.initialBalance + totalInc - totalExp;
 
-  const subject = `[Sổ Thu Chi] Bản sao lưu dữ liệu ngày ${nowStr}`;
-  const bodyText = `Xin chào,\n\nĐây là bản sao lưu dữ liệu Sổ Thu Chi cá nhân của bạn.\n\n📊 TÓM TẮT TÀI CHÍNH:\n- Số dư hiện tại: ${formatVND(currentBal)}\n- Tổng thu: ${formatVND(totalInc)}\n- Tổng chi: ${formatVND(totalExp)}\n- Số lượng giao dịch: ${State.transactions.length}\n- Thời gian sao lưu: ${new Date().toLocaleString('vi-VN')}\n\n📁 Tệp đính kèm "${fileName}" chứa đầy đủ dữ liệu định dạng JSON. Khi cần đổi máy hoặc cài lại ứng dụng, bạn chỉ cần tải tệp này về máy và chọn "Khôi phục dữ liệu từ file" trong app là xong!\n`;
+  const subject = `[Sổ Thu Chi] Bản sao lưu dữ liệu ${now.toLocaleDateString('vi-VN')}`;
+  const bodyText = `Xin chào,\n\nĐây là bản sao lưu dữ liệu Sổ Thu Chi cá nhân của bạn.\n\n📊 TÓM TẮT TÀI CHÍNH:\n- Số dư hiện tại: ${formatVND(currentBal)}\n- Tổng thu: ${formatVND(totalInc)}\n- Tổng chi: ${formatVND(totalExp)}\n- Số lượng giao dịch: ${State.transactions.length}\n- Thời gian sao lưu: ${now.toLocaleString('vi-VN')}\n\n📁 Tệp đính kèm "${fileName}" chứa đầy đủ dữ liệu định dạng JSON. Khi cần đổi máy hoặc cài lại ứng dụng, bạn chỉ cần tải tệp này về máy và chọn "Khôi phục dữ liệu từ file" trong app là xong!\n`;
 
   localStorage.setItem('last_backup_time', new Date().toISOString());
   updateLastBackupUI();
@@ -1014,10 +994,14 @@ function exportBackupJson() {
   };
 
   const jsonStr = JSON.stringify(backupData, null, 2);
-  const fileName = `so-thu-chi-backup-${getNowDateString()}.json`;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const timeStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}h${pad(now.getMinutes())}m${pad(now.getSeconds())}s`;
+  const fileName = `so-thu-chi-backup-${timeStamp}.json`;
 
   if (window.AndroidBridge && window.AndroidBridge.shareFile) {
     window.AndroidBridge.shareFile(fileName, jsonStr);
+    showToast(`💾 Đang chia sẻ file sao lưu (${State.transactions.length} giao dịch)...`);
     return;
   }
 
@@ -1028,7 +1012,7 @@ function exportBackupJson() {
   a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('💾 Đã tải file sao lưu JSON về máy!');
+  showToast(`💾 Đã xuất file ${fileName} (${State.transactions.length} giao dịch)!`);
 }
 
 function exportCsv() {
