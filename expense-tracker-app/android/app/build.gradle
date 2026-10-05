@@ -10,15 +10,29 @@ android {
         applicationId = "com.sothuchi.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        def runNumber = System.getenv("GITHUB_RUN_NUMBER")
+        versionCode = runNumber ? runNumber.toInteger() : 2
+        versionName = "1.0.${runNumber ?: '2'}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled = false
+            signingConfig signingConfigs.debug
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

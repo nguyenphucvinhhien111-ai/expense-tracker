@@ -40,6 +40,13 @@ jobs:
           sed -i 's/\r$//' "$DIR/gradlew"
           chmod +x "$DIR/gradlew"
           echo "sdk.dir=$ANDROID_HOME" > "$DIR/local.properties"
+          mkdir -p ~/.android
+          if [ -f "$DIR/app/debug.keystore" ]; then
+            cp "$DIR/app/debug.keystore" ~/.android/debug.keystore
+          else
+            keytool -genkey -v -keystore "$DIR/app/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            cp "$DIR/app/debug.keystore" ~/.android/debug.keystore
+          fi
 
       - name: Build Debug APK
         working-directory: ${{ steps.locate-dir.outputs.dir }}
