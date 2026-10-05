@@ -1092,6 +1092,50 @@ function exportCsv() {
   showToast('📊 Đã xuất file Excel (CSV) thành công!');
 }
 
+function findCategoryIcon(catName, type) {
+  if (!catName) return type === 'income' ? '💵' : '💸';
+  const norm = catName.toLowerCase().trim();
+  if (norm.includes('ăn') || norm.includes('uống') || norm.includes('sáng') || norm.includes('trưa') || norm.includes('tối')) return '🍜';
+  if (norm.includes('cà phê') || norm.includes('cafe') || norm.includes('nước')) return '☕';
+  if (norm.includes('xe') || norm.includes('xăng') || norm.includes('đi lại')) return '🛵';
+  if (norm.includes('chợ') || norm.includes('siêu thị')) return '🛒';
+  if (norm.includes('mua') || norm.includes('shop')) return '🛍️';
+  if (norm.includes('lương')) return '💵';
+  if (norm.includes('thưởng')) return '🎁';
+  if (norm.includes('kinh doanh') || norm.includes('bán')) return '💼';
+  return type === 'income' ? '💵' : '💸';
+}
+
+function normalizeTransaction(tx) {
+  let cleanDate = tx.date;
+  if (cleanDate && typeof cleanDate === 'string' && cleanDate.includes('T')) {
+    cleanDate = cleanDate.split('T')[0];
+  }
+  const type = tx.type === 'income' ? 'income' : 'expense';
+  const rawCat = tx.category ? String(tx.category).trim() : (type === 'income' ? 'Thu nhập khác' : 'Chi tiêu khác');
+  const category = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+  const icon = tx.categoryIcon || findCategoryIcon(category, type);
+
+  let createdAt = Date.now();
+  if (typeof tx.createdAt === 'number') {
+    createdAt = tx.createdAt;
+  } else if (tx.createdAt) {
+    const parsed = new Date(tx.createdAt).getTime();
+    if (!isNaN(parsed)) createdAt = parsed;
+  }
+
+  return {
+    id: tx.id || ('tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+    type: type,
+    amount: Number(tx.amount) || 0,
+    category: category,
+    categoryIcon: icon,
+    note: tx.note || '',
+    date: cleanDate || getNowDateString(),
+    createdAt: createdAt
+  };
+}
+
 function applyRestoredData(data) {
   if (!data || !Array.isArray(data.transactions)) {
     showToast('❌ Dữ liệu không đúng định dạng sao lưu!');
@@ -1101,13 +1145,13 @@ function applyRestoredData(data) {
     const ok = confirm(`Khôi phục sẽ thay thế ${State.transactions.length} giao dịch hiện tại bằng ${data.transactions.length} giao dịch từ bản sao lưu. Bạn có muốn tiếp tục?`);
     if (!ok) return false;
   }
-  State.transactions = data.transactions;
-  if (typeof data.initialBalance === 'number') {
-    State.initialBalance = data.initialBalance;
+  State.transactions = data.transactions.map(normalizeTransaction);
+  if (typeof data.initialBalance === 'number' || !isNaN(Number(data.initialBalance))) {
+    State.initialBalance = Number(data.initialBalance) || 0;
   }
   saveData();
   renderApp();
-  showToast('✅ Khôi phục dữ liệu thành công!');
+  showToast(`✅ Đã khôi phục thành công ${State.transactions.length} giao dịch!`);
   return true;
 }
 
