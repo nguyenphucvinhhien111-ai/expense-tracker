@@ -1178,6 +1178,15 @@ function initFirebase() {
     firebaseAuth = firebase.auth();
     firestoreDb = firebase.firestore();
 
+    // Kích hoạt HTTP Long Polling để Firestore hoạt động ổn định trên Android WebView và mạng di động
+    try {
+      firestoreDb.settings({
+        experimentalForceLongPolling: true
+      });
+    } catch (e) {
+      console.warn('Firestore settings:', e);
+    }
+
     // Lắng nghe trạng thái đăng nhập
     firebaseAuth.onAuthStateChanged((user) => {
       currentUser = user;
@@ -1259,7 +1268,15 @@ async function syncToCloud() {
     setSyncBadge('🟢 Đã đồng bộ', '#10b981');
   } catch (err) {
     console.error('Lỗi khi lưu lên mây:', err);
-    setSyncBadge('Chưa đồng bộ', '#f43f5e');
+    setSyncBadge('Lỗi đồng bộ', '#f43f5e');
+    const msg = String(err.message || '');
+    if (err.code === 'permission-denied') {
+      showToast('❌ Firestore bị chặn quyền truy cập! Hãy kiểm tra Rules trên Firebase Console.');
+    } else if (err.code === 'not-found' || msg.includes('NOT_FOUND') || msg.includes('does not exist') || msg.includes('404')) {
+      showToast('❌ Chưa tạo Firestore Database trên Firebase Console!');
+    } else if (err.code === 'unavailable') {
+      showToast('⚠️ Mạng chập chờn, dữ liệu đã lưu trên máy và sẽ đồng bộ khi có kết nối.');
+    }
   }
 }
 
@@ -1281,10 +1298,10 @@ async function syncFromCloud(user) {
           }
           saveDataLocally();
           renderApp();
-          showToast(`☁️ Đã đồng bộ ${data.transactions.length} giao dịch từ Gmail!`);
+          showToast(`☁️ Đã đồng bộ ${data.transactions.length} giao dịch từ đám mây!`);
         } else {
           // Máy đã có dữ liệu, xác nhận khôi phục
-          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch đã lưu. Bạn có muốn tải về và đồng bộ vào thiết bị này không?`);
+          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch đã lưu. Bạn có muốn tải về và khôi phục vào thiết bị này không?`);
           if (ok) {
             State.transactions = data.transactions;
             if (typeof data.initialBalance === 'number') {
@@ -1302,12 +1319,18 @@ async function syncFromCloud(user) {
     } else {
       // Đám mây chưa có dữ liệu, tải dữ liệu hiện tại trong máy lên mây
       await syncToCloud();
-      showToast('☁️ Đã sao lưu dữ liệu máy lên tài khoản Gmail!');
+      showToast('☁️ Đã sao lưu dữ liệu máy lên tài khoản đám mây!');
     }
     setSyncBadge('🟢 Đã đồng bộ', '#10b981');
   } catch (err) {
     console.error('Lỗi đồng bộ từ mây:', err);
     setSyncBadge('Lỗi đồng bộ', '#f43f5e');
+    const msg = String(err.message || '');
+    if (err.code === 'permission-denied') {
+      showToast('❌ Firestore bị chặn quyền truy cập! Hãy kiểm tra Rules trên Firebase Console.');
+    } else if (err.code === 'not-found' || msg.includes('NOT_FOUND') || msg.includes('does not exist') || msg.includes('404')) {
+      showToast('❌ Chưa tạo Firestore Database trên Firebase Console!');
+    }
   }
 }
 
@@ -1317,9 +1340,17 @@ function setupCloudEventListeners() {
   if (btnGoogle) {
     btnGoogle.addEventListener('click', async () => {
       if (!firebaseAuth) {
-        showToast('Firebase chưa sẵn sàng!');
+        showToast('⚠️ Firebase chưa được khởi tạo!');
         return;
       }
+
+      // Nếu đang chạy trong app Android APK (WebView)
+      if (window.AndroidBridge) {
+        openAuthModal('💡 Trên ứng dụng Android, Google hạn chế mở popup đăng nhập trực tiếp để bảo mật.\n\n👉 Bạn hãy nhập Email (Gmail) và đặt một Mật khẩu bên dưới (1 lần duy nhất) để ứng dụng tự động đồng bộ đám mây vĩnh viễn!');
+        return;
+      }
+
+      // Trình duyệt Web (Chrome, Edge, Máy tính...)
       const provider = new firebase.auth.GoogleAuthProvider();
       try {
         showToast('Đang kết nối tài khoản Google...');
@@ -1327,7 +1358,14 @@ function setupCloudEventListeners() {
         showToast('✅ Đăng nhập Google thành công!');
       } catch (err) {
         console.warn('Lỗi popup Google:', err);
-        openAuthModal('Để đảm bảo đăng nhập mượt mà trên điện thoại, bạn có thể nhập Email (Gmail) & Mật khẩu bên dưới:');
+        if (err.code === 'auth/configuration-not-found') {
+          showToast('❌ Dự án Firebase chưa bật Google Auth trên Firebase Console!');
+        } else if (err.code === 'auth/popup-blocked') {
+          showToast('⚠️ Trình duyệt chặn mở popup! Vui lòng cho phép popup.');
+        } else {
+          showToast(`⚠️ Không thể mở Google: ${err.message || err.code}`);
+        }
+        openAuthModal('Bạn có thể đăng nhập hoặc tạo tài khoản bằng Email (Gmail) & Mật khẩu bên dưới:');
       }
     });
   }
@@ -1377,11 +1415,13 @@ function setupCloudEventListeners() {
       const password = (passInput ? passInput.value : '').trim();
 
       if (!email || !email.includes('@')) {
-        showToast('⚠️ Vui lòng nhập email hợp lệ!');
+        showToast('⚠️ Vui lòng nhập địa chỉ email hợp lệ!');
+        if (emailInput) emailInput.focus();
         return;
       }
       if (!password || password.length < 6) {
         showToast('⚠️ Mật khẩu phải có tối thiểu 6 ký tự!');
+        if (passInput) passInput.focus();
         return;
       }
 
@@ -1390,20 +1430,58 @@ function setupCloudEventListeners() {
         btnAuthSubmit.textContent = 'Đang xử lý...';
 
         if (authMode === 'register') {
-          await firebaseAuth.createUserWithEmailAndPassword(email, password);
-          showToast('🎉 Đăng ký thành công và đã bắt đầu đồng bộ!');
+          try {
+            await firebaseAuth.createUserWithEmailAndPassword(email, password);
+            localStorage.setItem('user_backup_email', email);
+            showToast('🎉 Đăng ký thành công và đã bắt đầu đồng bộ!');
+          } catch (regErr) {
+            if (regErr.code === 'auth/email-already-in-use') {
+              // Thử đăng nhập nếu email đã tồn tại
+              await firebaseAuth.signInWithEmailAndPassword(email, password);
+              localStorage.setItem('user_backup_email', email);
+              showToast('✅ Đăng nhập thành công!');
+            } else {
+              throw regErr;
+            }
+          }
         } else {
-          await firebaseAuth.signInWithEmailAndPassword(email, password);
-          showToast('✅ Đăng nhập thành công!');
+          // Chế độ Đăng nhập
+          try {
+            await firebaseAuth.signInWithEmailAndPassword(email, password);
+            localStorage.setItem('user_backup_email', email);
+            showToast('✅ Đăng nhập thành công!');
+          } catch (signInErr) {
+            // Nếu chưa có tài khoản, tự động đăng ký mới luôn cho người dùng
+            if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
+              try {
+                await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                localStorage.setItem('user_backup_email', email);
+                showToast('🎉 Đã tự động tạo tài khoản và kích hoạt đồng bộ!');
+              } catch (createErr) {
+                if (createErr.code === 'auth/wrong-password') {
+                  throw signInErr;
+                }
+                throw createErr;
+              }
+            } else {
+              throw signInErr;
+            }
+          }
         }
         document.getElementById('dialog-auth-backdrop').style.display = 'none';
       } catch (err) {
         console.error('Auth error:', err);
-        let msg = err.message;
-        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-          msg = 'Email hoặc mật khẩu chưa chính xác!';
-        } else if (err.code === 'auth/email-already-in-use') {
-          msg = 'Email này đã được đăng ký! Vui lòng chọn Đăng nhập.';
+        let msg = err.message || 'Lỗi không xác định';
+        if (err.code === 'auth/configuration-not-found') {
+          msg = 'Dự án Firebase chưa bật tính năng "Authentication". Vui lòng vào Firebase Console > Authentication > nhấn Bắt đầu và bật Email/Password!';
+        } else if (err.code === 'auth/wrong-password') {
+          msg = 'Mật khẩu chưa chính xác! Vui lòng nhập đúng mật khẩu đã đăng ký trước đó.';
+        } else if (err.code === 'auth/weak-password') {
+          msg = 'Mật khẩu quá ngắn, vui lòng đặt mật khẩu từ 6 ký tự!';
+        } else if (err.code === 'auth/invalid-email') {
+          msg = 'Định dạng email chưa hợp lệ!';
+        } else if (err.code === 'auth/network-request-failed') {
+          msg = 'Không thể kết nối mạng, vui lòng kiểm tra Wifi/4G!';
         }
         showToast(`❌ ${msg}`);
       } finally {
@@ -1440,8 +1518,8 @@ function openAuthModal(noticeText) {
   const modal = document.getElementById('dialog-auth-backdrop');
   const desc = document.getElementById('auth-modal-desc');
   const emailInput = document.getElementById('auth-input-email');
-  if (noticeText && desc) {
-    desc.textContent = noticeText;
+  if (desc) {
+    desc.textContent = noticeText || 'Nhập Email (Gmail) và mật khẩu để đồng bộ dữ liệu lên đám mây:';
   }
   const savedEmail = localStorage.getItem('user_backup_email');
   if (savedEmail && emailInput && !emailInput.value) {
