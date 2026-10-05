@@ -20,10 +20,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept Android SDK licenses
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-
       - name: Locate Android directory
         id: locate-dir
         run: |
@@ -38,24 +34,23 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Prepare gradlew executable
+      - name: Prepare Android environment
         run: |
-          sed -i 's/\r$//' ${{ steps.locate-dir.outputs.dir }}/gradlew
-          chmod +x ${{ steps.locate-dir.outputs.dir }}/gradlew
+          DIR="${{ steps.locate-dir.outputs.dir }}"
+          sed -i 's/\r$//' "$DIR/gradlew"
+          chmod +x "$DIR/gradlew"
+          echo "sdk.dir=$ANDROID_HOME" > "$DIR/local.properties"
 
       - name: Build Debug APK
         working-directory: ${{ steps.locate-dir.outputs.dir }}
         run: |
-          set -o pipefail
-          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
-
-      - name: Upload Build Log Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: ${{ steps.locate-dir.outputs.dir }}/build.log
-          retention-days: 3
+          ./gradlew assembleDebug --stacktrace --no-daemon > build.log 2>&1 || STATUS=$?
+          if [ "${STATUS:-0}" -ne 0 ]; then
+            cat build.log
+            ERR=$(grep -E "FAILURE:|What went wrong:|Caused by:|error:" build.log -A 3 | head -n 20 | tr '\r\n' ' | ')
+            echo "::error title=Gradle Failure::$ERR"
+            exit $STATUS
+          fi
 
       - name: Upload APK Artifact
         if: success()
