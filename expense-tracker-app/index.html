@@ -142,13 +142,12 @@
                 <input type="text" id="search-input" placeholder="Tìm kiếm khoản chi, thu, ghi chú..." />
                 <button class="clear-search-btn" id="clear-search-btn" style="display: none;">✕</button>
               </div>
-              <div class="date-filter-box" id="date-filter-box" title="Bấm để chọn ngày xem thu chi">
-                <button type="button" class="btn-date-filter" id="btn-date-filter" aria-label="Lọc theo ngày">
+              <div class="date-filter-box" id="date-filter-box" title="Bấm để lọc theo khoảng ngày (quý, nửa năm, năm...)">
+                <button type="button" class="btn-date-filter" id="btn-date-filter" aria-label="Lọc theo khoảng ngày">
                   <span class="date-icon">📅</span>
-                  <span id="date-filter-text" class="date-text">Chọn ngày</span>
+                  <span id="date-filter-text" class="date-text">Lọc ngày</span>
                 </button>
                 <button type="button" class="btn-clear-date" id="btn-clear-date" title="Xóa lọc ngày, xem cả tháng" style="display: none;" aria-label="Xóa lọc ngày">✕</button>
-                <input type="date" id="input-date-filter" class="native-date-overlay" aria-label="Chọn ngày xem thu chi" />
               </div>
             </div>
 
@@ -503,6 +502,50 @@
           <div class="dialog-buttons">
             <button class="dialog-btn secondary" id="btn-close-preview-json">Đóng</button>
             <button class="dialog-btn primary" id="btn-copy-preview-json">📋 Sao chép mã</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: DATE RANGE FILTER (LỌC KHOẢNG NGÀY TÙY CHỌN) -->
+      <div class="modal-dialog-backdrop" id="dialog-date-range-backdrop" style="display: none;">
+        <div class="modal-dialog" style="max-width: 360px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 class="dialog-title" style="margin: 0; font-size: 1.05rem;">📅 Lọc Khoảng Ngày</h4>
+            <button type="button" id="btn-close-date-range" style="background: none; border: none; font-size: 1.3rem; color: var(--text-muted); cursor: pointer; padding: 2px 6px;">&times;</button>
+          </div>
+          <p class="dialog-desc" style="margin-bottom: 12px; font-size: 0.78rem;">
+            Chọn ngày bắt đầu và kết thúc để xem chi tiêu theo khoảng ngày bất kỳ (nửa năm, cả quý, năm nay...):
+          </p>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">Từ ngày:</label>
+              <input type="date" id="input-range-start" class="form-input" style="width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 0.82rem;" />
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">Đến ngày:</label>
+              <input type="date" id="input-range-end" class="form-input" style="width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 0.82rem;" />
+            </div>
+          </div>
+
+          <!-- Nút chọn khoảng thời gian nhanh -->
+          <div style="margin-bottom: 14px;">
+            <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Mốc thời gian nhanh:</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <button type="button" class="quick-amt-chip" data-range-preset="today">Hôm nay</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="yesterday">Hôm qua</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="this-week">Tuần này</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="this-month">Tháng này</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="last-month">Tháng trước</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="this-quarter">Quý này (3 tháng)</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="half-year">Nửa năm (6 tháng)</button>
+              <button type="button" class="quick-amt-chip" data-range-preset="this-year">Năm nay (Cả năm)</button>
+            </div>
+          </div>
+
+          <div class="dialog-buttons" style="display: flex; gap: 8px;">
+            <button type="button" class="dialog-btn secondary" id="btn-reset-date-range" style="flex: 1; padding: 10px; font-size: 0.82rem;">Xem cả tháng</button>
+            <button type="button" class="dialog-btn primary" id="btn-apply-date-range" style="flex: 1; padding: 10px; font-size: 0.82rem; font-weight: 700;">Áp dụng lọc</button>
           </div>
         </div>
       </div>

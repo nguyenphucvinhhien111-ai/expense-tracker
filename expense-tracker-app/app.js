@@ -33,6 +33,7 @@ const State = {
   debts: [], // Danh sách quản lý nợ / cho vay
   initialBalance: 0,
   currentYearMonth: '', // Format 'YYYY-MM'
+  dateRange: { start: null, end: null, label: '' }, // Lọc khoảng ngày (Từ ngày ... Đến ngày ...)
   selectedDateFilter: null, // Format 'YYYY-MM-DD' hoặc null (lọc theo ngày cụ thể)
   filterType: 'all',    // 'all' | 'expense' | 'income'
   searchQuery: '',
@@ -302,8 +303,149 @@ function renderBalanceCard() {
 }
 
 // =========================================================
-// QUẢN LÝ BỘ LỌC THEO NGÀY (DATE PICKER)
+// QUẢN LÝ BỘ LỌC THEO KHOẢNG NGÀY (DATE RANGE & PRESETS)
 // =========================================================
+
+function getRangePreset(presetKey) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const toStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (presetKey === 'today') {
+    const s = toStr(now);
+    return { start: s, end: s, label: 'Hôm nay' };
+  }
+  if (presetKey === 'yesterday') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    const s = toStr(d);
+    return { start: s, end: s, label: 'Hôm qua' };
+  }
+  if (presetKey === 'this-week') {
+    const d = new Date(now);
+    const day = d.getDay() === 0 ? 7 : d.getDay();
+    d.setDate(d.getDate() - day + 1);
+    const start = toStr(d);
+    return { start: start, end: toStr(now), label: 'Tuần này' };
+  }
+  if (presetKey === 'this-month') {
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const start = `${y}-${pad(m + 1)}-01`;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+    return { start: start, end: end, label: `Tháng ${m + 1}/${y}` };
+  }
+  if (presetKey === 'last-month') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const start = `${y}-${pad(m + 1)}-01`;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+    return { start: start, end: end, label: `Tháng trước (${m + 1}/${y})` };
+  }
+  if (presetKey === 'this-quarter') {
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const q = Math.floor(m / 3);
+    const startMonth = q * 3;
+    const start = `${y}-${pad(startMonth + 1)}-01`;
+    const endMonth = startMonth + 2;
+    const lastDay = new Date(y, endMonth + 1, 0).getDate();
+    const end = `${y}-${pad(endMonth + 1)}-${pad(lastDay)}`;
+    return { start: start, end: end, label: `Quý ${q + 1} (${startMonth + 1}-${endMonth + 1}/${y})` };
+  }
+  if (presetKey === 'half-year') {
+    const dStart = new Date(now);
+    dStart.setMonth(dStart.getMonth() - 5);
+    dStart.setDate(1);
+    const start = toStr(dStart);
+    const end = toStr(now);
+    return { start: start, end: end, label: 'Nửa năm (6 tháng)' };
+  }
+  if (presetKey === 'this-year') {
+    const y = now.getFullYear();
+    const start = `${y}-01-01`;
+    const end = `${y}-12-31`;
+    return { start: start, end: end, label: `Năm ${y} (Cả năm)` };
+  }
+  return null;
+}
+
+function openDateRangeModal() {
+  const backdrop = document.getElementById('dialog-date-range-backdrop');
+  const startInput = document.getElementById('input-range-start');
+  const endInput = document.getElementById('input-range-end');
+  if (!backdrop) return;
+
+  if (State.dateRange && (State.dateRange.start || State.dateRange.end)) {
+    if (startInput) startInput.value = State.dateRange.start || '';
+    if (endInput) endInput.value = State.dateRange.end || '';
+  } else if (State.selectedDateFilter) {
+    if (startInput) startInput.value = State.selectedDateFilter;
+    if (endInput) endInput.value = State.selectedDateFilter;
+  } else {
+    const [y, m] = State.currentYearMonth.split('-');
+    const lastDay = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+    if (startInput) startInput.value = `${y}-${m}-01`;
+    if (endInput) endInput.value = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  backdrop.style.display = 'flex';
+}
+
+function closeDateRangeModal() {
+  const backdrop = document.getElementById('dialog-date-range-backdrop');
+  if (backdrop) backdrop.style.display = 'none';
+}
+
+function applyDateRangeFilter(start, end, customLabel = '') {
+  if (!start && !end) {
+    clearDateRangeFilter();
+    return;
+  }
+
+  let finalStart = start;
+  let finalEnd = end;
+  if (finalStart && finalEnd && finalStart > finalEnd) {
+    [finalStart, finalEnd] = [finalEnd, finalStart];
+  }
+
+  let label = customLabel;
+  if (!label) {
+    if (finalStart && finalEnd) {
+      if (finalStart === finalEnd) {
+        label = formatDateDisplay(finalStart);
+      } else {
+        label = `${formatDateDisplay(finalStart)} - ${formatDateDisplay(finalEnd)}`;
+      }
+    } else if (finalStart) {
+      label = `Từ ${formatDateDisplay(finalStart)}`;
+    } else {
+      label = `Đến ${formatDateDisplay(finalEnd)}`;
+    }
+  }
+
+  State.dateRange = {
+    start: finalStart || null,
+    end: finalEnd || null,
+    label: label
+  };
+  State.selectedDateFilter = null;
+
+  closeDateRangeModal();
+  renderApp();
+  showToast(`📅 Đang lọc: ${label}`);
+}
+
+function clearDateRangeFilter() {
+  State.dateRange = { start: null, end: null, label: '' };
+  State.selectedDateFilter = null;
+  closeDateRangeModal();
+  renderApp();
+  showToast('Đã về xem theo tháng');
+}
 
 function setDateFilter(dateStr) {
   if (!dateStr) {
@@ -311,6 +453,7 @@ function setDateFilter(dateStr) {
     return;
   }
   State.selectedDateFilter = dateStr;
+  State.dateRange = { start: null, end: null, label: '' };
   const targetYearMonth = dateStr.substring(0, 7);
   if (targetYearMonth !== State.currentYearMonth) {
     State.currentYearMonth = targetYearMonth;
@@ -320,25 +463,33 @@ function setDateFilter(dateStr) {
 }
 
 function clearDateFilter() {
-  State.selectedDateFilter = null;
-  renderApp();
-  showToast('Đã chuyển về xem cả tháng');
+  clearDateRangeFilter();
 }
 
 function renderDateFilterUI() {
   const box = document.getElementById('date-filter-box');
   const textEl = document.getElementById('date-filter-text');
   const clearBtn = document.getElementById('btn-clear-date');
-  const inputEl = document.getElementById('input-date-filter');
   const banner = document.getElementById('active-date-banner');
   const bannerText = document.getElementById('active-date-banner-text');
 
   if (!box || !textEl || !clearBtn) return;
 
-  if (State.selectedDateFilter) {
+  const isRangeActive = State.dateRange && (State.dateRange.start || State.dateRange.end);
+  const isSingleActive = !!State.selectedDateFilter;
+
+  if (isRangeActive) {
     box.classList.add('active');
     clearBtn.style.display = 'flex';
-    if (inputEl) inputEl.value = State.selectedDateFilter;
+    textEl.textContent = State.dateRange.label || 'Đang lọc';
+
+    if (banner && bannerText) {
+      banner.style.display = 'flex';
+      bannerText.textContent = State.dateRange.label;
+    }
+  } else if (isSingleActive) {
+    box.classList.add('active');
+    clearBtn.style.display = 'flex';
 
     const todayStr = getNowDateString();
     const yesterdayStr = (() => {
@@ -363,8 +514,7 @@ function renderDateFilterUI() {
   } else {
     box.classList.remove('active');
     clearBtn.style.display = 'none';
-    textEl.textContent = 'Chọn ngày';
-    if (inputEl) inputEl.value = '';
+    textEl.textContent = 'Lọc ngày';
     if (banner) banner.style.display = 'none';
   }
 }
@@ -373,12 +523,25 @@ function renderTransactionList() {
   const container = document.getElementById('tx-list-container');
   const badgeEl = document.getElementById('tx-count-badge');
 
-  // Lọc giao dịch theo tháng được chọn
-  let filtered = State.transactions.filter(tx => tx.date.startsWith(State.currentYearMonth));
+  let filtered = State.transactions;
 
-  // LỌC THEO NGÀY CỤ THỂ NẾU CÓ CHỌN DATE PICKER
-  if (State.selectedDateFilter) {
+  // 1. Lọc theo khoảng ngày nếu có
+  if (State.dateRange && (State.dateRange.start || State.dateRange.end)) {
+    const s = State.dateRange.start;
+    const e = State.dateRange.end;
+    filtered = filtered.filter(tx => {
+      if (s && tx.date < s) return false;
+      if (e && tx.date > e) return false;
+      return true;
+    });
+  }
+  // 2. Hoặc lọc theo ngày cụ thể nếu có
+  else if (State.selectedDateFilter) {
     filtered = filtered.filter(tx => tx.date === State.selectedDateFilter);
+  }
+  // 3. Hoặc mặc định lọc theo tháng được chọn
+  else {
+    filtered = filtered.filter(tx => tx.date.startsWith(State.currentYearMonth));
   }
 
   // Lọc theo loại (All / Expense / Income)
@@ -401,13 +564,14 @@ function renderTransactionList() {
 
   // Nếu không có giao dịch nào
   if (filtered.length === 0) {
-    if (State.selectedDateFilter) {
-      const formatted = formatDateDisplay(State.selectedDateFilter);
+    const isRange = State.dateRange && (State.dateRange.start || State.dateRange.end);
+    if (isRange || State.selectedDateFilter) {
+      const label = isRange ? State.dateRange.label : formatDateDisplay(State.selectedDateFilter);
       container.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">📅</span>
-          <h4 class="empty-title">Không có giao dịch ngày ${formatted}</h4>
-          <p class="empty-desc">Chưa có khoản thu hay chi nào được ghi nhận trong ngày này.</p>
+          <h4 class="empty-title">Không có giao dịch trong đợt này</h4>
+          <p class="empty-desc">Không tìm thấy khoản thu hay chi nào trong khoảng: <strong>${label}</strong>.</p>
           <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
             <button type="button" class="empty-cta-btn" id="btn-empty-clear-date" style="padding:8px 14px;border-radius:8px;background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid rgba(99,102,241,0.3);font-weight:700;font-size:0.8rem;cursor:pointer;">
               Xem cả tháng ✕
@@ -417,7 +581,7 @@ function renderTransactionList() {
       `;
       const btnEmptyClear = document.getElementById('btn-empty-clear-date');
       if (btnEmptyClear) {
-        btnEmptyClear.addEventListener('click', clearDateFilter);
+        btnEmptyClear.addEventListener('click', clearDateRangeFilter);
       }
       return;
     }
@@ -573,13 +737,35 @@ function escapeHtml(str) {
 }
 
 function renderStatsView() {
-  const monthTransactions = State.transactions.filter(tx => tx.date.startsWith(State.currentYearMonth));
+  let rangeTransactions = State.transactions;
+  let statsTitle = '';
+
+  if (State.dateRange && (State.dateRange.start || State.dateRange.end)) {
+    const s = State.dateRange.start;
+    const e = State.dateRange.end;
+    rangeTransactions = rangeTransactions.filter(tx => {
+      if (s && tx.date < s) return false;
+      if (e && tx.date > e) return false;
+      return true;
+    });
+    statsTitle = State.dateRange.label || `${formatDateDisplay(s || 'Trước')} - ${formatDateDisplay(e || 'Nay')}`;
+  } else if (State.selectedDateFilter) {
+    rangeTransactions = rangeTransactions.filter(tx => tx.date === State.selectedDateFilter);
+    statsTitle = formatDateDisplay(State.selectedDateFilter);
+  } else {
+    rangeTransactions = rangeTransactions.filter(tx => tx.date.startsWith(State.currentYearMonth));
+    const [yearStr, monthStr] = State.currentYearMonth.split('-');
+    statsTitle = `${parseInt(monthStr, 10)}/${yearStr}`;
+  }
+
+  const statsMonthEl = document.getElementById('stats-month-label');
+  if (statsMonthEl) statsMonthEl.textContent = statsTitle;
 
   let totalIncome = 0;
   let totalExpense = 0;
   const expenseByCat = {};
 
-  monthTransactions.forEach(tx => {
+  rangeTransactions.forEach(tx => {
     if (tx.type === 'income') {
       if (!isDebtRecoveryTx(tx)) {
         totalIncome += tx.amount;
@@ -616,7 +802,7 @@ function renderStatsView() {
   const categoriesArray = Object.values(expenseByCat);
 
   if (categoriesArray.length === 0) {
-    catListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 20px;">Tháng này bạn chưa có khoản chi nào.</p>`;
+    catListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 20px;">Đợt này bạn chưa có khoản chi nào.</p>`;
     return;
   }
 
@@ -862,6 +1048,15 @@ function handleSaveTransaction() {
   if (State.editingTxId) {
     const idx = State.transactions.findIndex(t => t.id === State.editingTxId);
     if (idx !== -1) {
+      const oldTx = State.transactions[idx];
+
+      // Bù trừ số dư ví thông minh nếu giao dịch cũ là khoản nợ legacy
+      if (isDebtRecoveryTx(oldTx)) {
+        State.initialBalance = Math.max(0, State.initialBalance - oldTx.amount + amount);
+      } else if (isLoanGivenTx(oldTx)) {
+        State.initialBalance = State.initialBalance + oldTx.amount - amount;
+      }
+
       State.transactions[idx] = {
         ...State.transactions[idx],
         type: State.modalType,
@@ -1490,59 +1685,67 @@ function setupEventListeners() {
   // Nút Hôm nay
   document.getElementById('today-chip-btn').addEventListener('click', () => {
     State.currentYearMonth = getNowYearMonth();
+    State.dateRange = { start: null, end: null, label: '' };
     State.selectedDateFilter = null;
     renderApp();
     showToast('Đã về tháng hiện tại');
   });
 
-  // Lọc theo ngày (Date Picker)
-  const inputDateFilter = document.getElementById('input-date-filter');
+  // Mở modal Lọc theo khoảng ngày (Date Range Picker)
   const btnDateFilter = document.getElementById('btn-date-filter');
   const btnClearDate = document.getElementById('btn-clear-date');
   const btnBannerClear = document.getElementById('btn-banner-clear-date');
 
-  if (inputDateFilter) {
-    inputDateFilter.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (val) {
-        setDateFilter(val);
-      }
-    });
-  }
-
-  const triggerDatePicker = () => {
-    if (!inputDateFilter) return;
-    try {
-      if (typeof inputDateFilter.showPicker === 'function') {
-        inputDateFilter.showPicker();
-      } else {
-        inputDateFilter.click();
-      }
-    } catch (err) {
-      inputDateFilter.focus();
-      inputDateFilter.click();
-    }
-  };
-
   if (btnDateFilter) {
     btnDateFilter.addEventListener('click', (e) => {
       if (e.target.closest('#btn-clear-date')) return;
-      triggerDatePicker();
+      openDateRangeModal();
     });
   }
+
+  // Đóng modal lọc ngày
+  document.getElementById('btn-close-date-range')?.addEventListener('click', closeDateRangeModal);
+  document.getElementById('dialog-date-range-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'dialog-date-range-backdrop') closeDateRangeModal();
+  });
+
+  // Chọn khoảng thời gian nhanh (Presets: Hôm nay, Tuần này, Tháng này, Quý này, Nửa năm, Năm nay...)
+  document.querySelectorAll('[data-range-preset]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const key = chip.dataset.rangePreset;
+      const preset = getRangePreset(key);
+      if (preset) {
+        const startInput = document.getElementById('input-range-start');
+        const endInput = document.getElementById('input-range-end');
+        if (startInput) startInput.value = preset.start;
+        if (endInput) endInput.value = preset.end;
+        applyDateRangeFilter(preset.start, preset.end, preset.label);
+      }
+    });
+  });
+
+  // Nút Áp dụng lọc theo khoảng ngày
+  document.getElementById('btn-apply-date-range')?.addEventListener('click', () => {
+    const startVal = document.getElementById('input-range-start')?.value || '';
+    const endVal = document.getElementById('input-range-end')?.value || '';
+    applyDateRangeFilter(startVal, endVal);
+  });
+
+  // Nút Hủy / Reset bộ lọc ngày
+  document.getElementById('btn-reset-date-range')?.addEventListener('click', clearDateRangeFilter);
 
   if (btnClearDate) {
     btnClearDate.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      clearDateFilter();
+      clearDateRangeFilter();
     });
   }
 
   if (btnBannerClear) {
     btnBannerClear.addEventListener('click', (e) => {
       e.preventDefault();
-      clearDateFilter();
+      clearDateRangeFilter();
     });
   }
 
@@ -1874,6 +2077,7 @@ function changeMonth(delta) {
   }
 
   State.currentYearMonth = `${y}-${String(m).padStart(2, '0')}`;
+  State.dateRange = { start: null, end: null, label: '' };
   State.selectedDateFilter = null;
   renderApp();
 }
