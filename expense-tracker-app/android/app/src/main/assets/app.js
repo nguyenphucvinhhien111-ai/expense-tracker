@@ -34,6 +34,7 @@ const State = {
   transactions: [],
   initialBalance: 0,
   currentYearMonth: '', // Format 'YYYY-MM'
+  selectedDateFilter: null, // Format 'YYYY-MM-DD' hoặc null (lọc theo ngày cụ thể)
   filterType: 'all',    // 'all' | 'expense' | 'income'
   searchQuery: '',
   isBalanceHidden: true, // MẶC ĐỊNH KHI VÀO APP LÀ ẨN TIỀN
@@ -281,12 +282,85 @@ function renderBalanceCard() {
   }
 }
 
+// =========================================================
+// QUẢN LÝ BỘ LỌC THEO NGÀY (DATE PICKER)
+// =========================================================
+
+function setDateFilter(dateStr) {
+  if (!dateStr) {
+    clearDateFilter();
+    return;
+  }
+  State.selectedDateFilter = dateStr;
+  const targetYearMonth = dateStr.substring(0, 7);
+  if (targetYearMonth !== State.currentYearMonth) {
+    State.currentYearMonth = targetYearMonth;
+  }
+  renderApp();
+  showToast(`📅 Đang lọc ngày: ${formatDateDisplay(dateStr)}`);
+}
+
+function clearDateFilter() {
+  State.selectedDateFilter = null;
+  renderApp();
+  showToast('Đã chuyển về xem cả tháng');
+}
+
+function renderDateFilterUI() {
+  const box = document.getElementById('date-filter-box');
+  const textEl = document.getElementById('date-filter-text');
+  const clearBtn = document.getElementById('btn-clear-date');
+  const inputEl = document.getElementById('input-date-filter');
+  const banner = document.getElementById('active-date-banner');
+  const bannerText = document.getElementById('active-date-banner-text');
+
+  if (!box || !textEl || !clearBtn) return;
+
+  if (State.selectedDateFilter) {
+    box.classList.add('active');
+    clearBtn.style.display = 'flex';
+    if (inputEl) inputEl.value = State.selectedDateFilter;
+
+    const todayStr = getNowDateString();
+    const yesterdayStr = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+
+    let displayLabel = formatDateDisplay(State.selectedDateFilter);
+    if (State.selectedDateFilter === todayStr) {
+      displayLabel = `Hôm nay (${displayLabel})`;
+    } else if (State.selectedDateFilter === yesterdayStr) {
+      displayLabel = `Hôm qua (${displayLabel})`;
+    }
+
+    textEl.textContent = displayLabel;
+
+    if (banner && bannerText) {
+      banner.style.display = 'flex';
+      bannerText.textContent = `${displayLabel} • ${getDayOfWeekName(State.selectedDateFilter)}`;
+    }
+  } else {
+    box.classList.remove('active');
+    clearBtn.style.display = 'none';
+    textEl.textContent = 'Chọn ngày';
+    if (inputEl) inputEl.value = '';
+    if (banner) banner.style.display = 'none';
+  }
+}
+
 function renderTransactionList() {
   const container = document.getElementById('tx-list-container');
   const badgeEl = document.getElementById('tx-count-badge');
 
   // Lọc giao dịch theo tháng được chọn
   let filtered = State.transactions.filter(tx => tx.date.startsWith(State.currentYearMonth));
+
+  // LỌC THEO NGÀY CỤ THỂ NẾU CÓ CHỌN DATE PICKER
+  if (State.selectedDateFilter) {
+    filtered = filtered.filter(tx => tx.date === State.selectedDateFilter);
+  }
 
   // Lọc theo loại (All / Expense / Income)
   if (State.filterType !== 'all') {
@@ -304,9 +378,31 @@ function renderTransactionList() {
   }
 
   badgeEl.textContent = String(filtered.length);
+  renderDateFilterUI();
 
   // Nếu không có giao dịch nào
   if (filtered.length === 0) {
+    if (State.selectedDateFilter) {
+      const formatted = formatDateDisplay(State.selectedDateFilter);
+      container.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">📅</span>
+          <h4 class="empty-title">Không có giao dịch ngày ${formatted}</h4>
+          <p class="empty-desc">Chưa có khoản thu hay chi nào được ghi nhận trong ngày này.</p>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
+            <button type="button" class="empty-cta-btn" id="btn-empty-clear-date" style="padding:8px 14px;border-radius:8px;background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid rgba(99,102,241,0.3);font-weight:700;font-size:0.8rem;cursor:pointer;">
+              Xem cả tháng ✕
+            </button>
+          </div>
+        </div>
+      `;
+      const btnEmptyClear = document.getElementById('btn-empty-clear-date');
+      if (btnEmptyClear) {
+        btnEmptyClear.addEventListener('click', clearDateFilter);
+      }
+      return;
+    }
+
     container.innerHTML = `
       <div class="empty-state">
         <span class="empty-icon">🍃</span>
@@ -569,8 +665,8 @@ function openTransactionModal(defaultType = 'expense') {
   // Cập nhật giao diện toggle type
   updateModalTypeToggle(defaultType);
 
-  // Đặt ngày mặc định là hôm nay
-  document.getElementById('input-date').value = getNowDateString();
+  // Đặt ngày mặc định là ngày đang lọc nếu có, hoặc hôm nay
+  document.getElementById('input-date').value = State.selectedDateFilter || getNowDateString();
   document.getElementById('input-amount').value = '';
   document.getElementById('input-note').value = '';
 
@@ -834,9 +930,61 @@ function setupEventListeners() {
   // Nút Hôm nay
   document.getElementById('today-chip-btn').addEventListener('click', () => {
     State.currentYearMonth = getNowYearMonth();
+    State.selectedDateFilter = null;
     renderApp();
     showToast('Đã về tháng hiện tại');
   });
+
+  // Lọc theo ngày (Date Picker)
+  const inputDateFilter = document.getElementById('input-date-filter');
+  const btnDateFilter = document.getElementById('btn-date-filter');
+  const btnClearDate = document.getElementById('btn-clear-date');
+  const btnBannerClear = document.getElementById('btn-banner-clear-date');
+
+  if (inputDateFilter) {
+    inputDateFilter.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val) {
+        setDateFilter(val);
+      }
+    });
+  }
+
+  const triggerDatePicker = () => {
+    if (!inputDateFilter) return;
+    try {
+      if (typeof inputDateFilter.showPicker === 'function') {
+        inputDateFilter.showPicker();
+      } else {
+        inputDateFilter.click();
+      }
+    } catch (err) {
+      inputDateFilter.focus();
+      inputDateFilter.click();
+    }
+  };
+
+  if (btnDateFilter) {
+    btnDateFilter.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-clear-date')) return;
+      triggerDatePicker();
+    });
+  }
+
+  if (btnClearDate) {
+    btnClearDate.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      clearDateFilter();
+    });
+  }
+
+  if (btnBannerClear) {
+    btnBannerClear.addEventListener('click', (e) => {
+      e.preventDefault();
+      clearDateFilter();
+    });
+  }
 
   // Bộ lọc nhanh (Tất cả / Chi / Thu)
   document.querySelectorAll('.filter-pill').forEach(pill => {
@@ -1050,6 +1198,7 @@ function changeMonth(delta) {
   }
 
   State.currentYearMonth = `${y}-${String(m).padStart(2, '0')}`;
+  State.selectedDateFilter = null;
   renderApp();
 }
 

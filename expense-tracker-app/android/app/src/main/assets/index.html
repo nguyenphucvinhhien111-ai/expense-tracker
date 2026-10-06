@@ -135,11 +135,30 @@
               </div>
             </div>
 
-            <!-- SEARCH BAR -->
-            <div class="search-box">
-              <span class="search-icon">🔍</span>
-              <input type="text" id="search-input" placeholder="Tìm kiếm khoản chi, thu, ghi chú..." />
-              <button class="clear-search-btn" id="clear-search-btn" style="display: none;">✕</button>
+            <!-- SEARCH BAR & DATE FILTER ROW -->
+            <div class="search-filter-row">
+              <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" placeholder="Tìm kiếm khoản chi, thu, ghi chú..." />
+                <button class="clear-search-btn" id="clear-search-btn" style="display: none;">✕</button>
+              </div>
+              <div class="date-filter-box" id="date-filter-box" title="Bấm để chọn ngày xem thu chi">
+                <button type="button" class="btn-date-filter" id="btn-date-filter" aria-label="Lọc theo ngày">
+                  <span class="date-icon">📅</span>
+                  <span id="date-filter-text" class="date-text">Chọn ngày</span>
+                </button>
+                <button type="button" class="btn-clear-date" id="btn-clear-date" title="Xóa lọc ngày, xem cả tháng" style="display: none;" aria-label="Xóa lọc ngày">✕</button>
+                <input type="date" id="input-date-filter" class="native-date-overlay" aria-label="Chọn ngày xem thu chi" />
+              </div>
+            </div>
+
+            <!-- ACTIVE DATE FILTER BANNER -->
+            <div id="active-date-banner" class="active-date-banner" style="display: none;">
+              <div class="banner-left">
+                <span class="banner-icon">📅</span>
+                <span>Đang lọc: <strong id="active-date-banner-text">--</strong></span>
+              </div>
+              <button type="button" id="btn-banner-clear-date" class="banner-clear-btn">Xem cả tháng ✕</button>
             </div>
 
             <!-- TRANSACTIONS LIST CONTAINER -->

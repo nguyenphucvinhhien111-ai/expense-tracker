@@ -224,6 +224,22 @@ body.theme-light .search-box {
   border-color: rgba(0, 0, 0, 0.08);
 }
 
+body.theme-light .date-filter-box {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .date-filter-box.active {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: #6366f1;
+}
+
+body.theme-light .active-date-banner {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: #1e293b;
+}
+
 body.theme-light .setting-item {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.06);
@@ -818,6 +834,142 @@ html, body {
   cursor: pointer;
   font-size: 0.8rem;
   padding: 2px 6px;
+}
+
+/* Search & Date Filter Row */
+.search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-filter-row .search-box {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-filter-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  height: 38px;
+  padding: 0 10px;
+  gap: 6px;
+  transition: var(--transition);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.date-filter-box:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.date-filter-box.active {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: #6366f1;
+}
+
+.date-filter-box.active .date-text {
+  color: #6366f1;
+  font-weight: 700;
+}
+
+.btn-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.date-filter-box.active .btn-date-filter {
+  color: #6366f1;
+}
+
+.btn-clear-date {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.14);
+  border: none;
+  color: #ef4444;
+  font-size: 0.72rem;
+  font-weight: 800;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  z-index: 3;
+  position: relative;
+  transition: var(--transition);
+}
+
+.btn-clear-date:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.native-date-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.date-filter-box.active .native-date-overlay {
+  width: calc(100% - 26px);
+}
+
+.active-date-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  animation: fadeIn 0.2s ease;
+}
+
+.active-date-banner .banner-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.banner-clear-btn {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #6366f1;
+  font-weight: 700;
+  font-size: 0.74rem;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.banner-clear-btn:hover {
+  background: #6366f1;
+  color: #ffffff;
 }
 
 /* Day Groups & Transaction Items */
