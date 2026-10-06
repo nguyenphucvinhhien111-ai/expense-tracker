@@ -186,25 +186,40 @@ function renderMonthSelector() {
   }
 }
 
+function isDebtRecoveryTx(tx) {
+  if (!tx) return false;
+  return tx.isDebtRecovery === true || tx.category === 'Thu hồi nợ' || tx.categoryId === 'thu-no';
+}
+
 function renderBalanceCard() {
   // Tính tổng số dư tất cả các tháng (Số dư ban đầu + Tổng tất cả Thu - Tổng tất cả Chi)
   let totalAllIncome = 0;
   let totalAllExpense = 0;
 
   State.transactions.forEach(tx => {
-    if (tx.type === 'income') totalAllIncome += tx.amount;
+    if (tx.type === 'income') {
+      // Khoản "Thu hồi nợ" đã được cộng dồn trực tiếp vào State.initialBalance nên không cộng vào totalAllIncome để tránh nhân đôi
+      if (!isDebtRecoveryTx(tx)) {
+        totalAllIncome += tx.amount;
+      }
+    }
     else if (tx.type === 'expense') totalAllExpense += tx.amount;
   });
 
   const overallBalance = State.initialBalance + totalAllIncome - totalAllExpense;
 
-  // Tính thu chi riêng của tháng hiện tại được chọn
+  // Tính thu chi riêng của tháng hiện tại được chọn (DOANH THU THÁNG)
   let monthIncome = 0;
   let monthExpense = 0;
 
   State.transactions.forEach(tx => {
     if (tx.date.startsWith(State.currentYearMonth)) {
-      if (tx.type === 'income') monthIncome += tx.amount;
+      if (tx.type === 'income') {
+        // KHÔNG CỘNG VÀO DOANH THU THÁNG NẾU LÀ THU HỒI NỢ
+        if (!isDebtRecoveryTx(tx)) {
+          monthIncome += tx.amount;
+        }
+      }
       else if (tx.type === 'expense') monthExpense += tx.amount;
     }
   });
@@ -241,6 +256,12 @@ function renderBalanceCard() {
       monthNetEl.textContent = `- ${formatCurrency(Math.abs(monthNet))} ₫`;
       monthNetEl.style.color = 'var(--expense-red)';
     }
+  }
+
+  // Cập nhật nhãn số dư ban đầu trong mục Cài đặt
+  const settingInitBadge = document.getElementById('setting-initial-balance-val');
+  if (settingInitBadge) {
+    settingInitBadge.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(State.initialBalance)} ₫`;
   }
 }
 
@@ -309,7 +330,9 @@ function renderTransactionList() {
     let dayIncome = 0;
     let dayExpense = 0;
     dayTransactions.forEach(t => {
-      if (t.type === 'income') dayIncome += t.amount;
+      if (t.type === 'income') {
+        if (!isDebtRecoveryTx(t)) dayIncome += t.amount;
+      }
       else dayExpense += t.amount;
     });
 
@@ -347,17 +370,19 @@ function renderTransactionList() {
 
     dayTransactions.forEach(tx => {
       const isIncome = tx.type === 'income';
+      const isDebt = isDebtRecoveryTx(tx);
       const sign = isIncome ? '+' : '-';
       const amountClass = isIncome ? 'income' : 'expense';
       const amountDisplay = State.isBalanceHidden ? `${sign} •••••• ₫` : `${sign} ${formatCurrency(tx.amount)} ₫`;
+      const debtBadge = isDebt ? `<span style="font-size:0.68rem; background:rgba(99,102,241,0.12); color:#6366f1; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:4px;">Cộng số dư ví</span>` : '';
 
       html += `
         <div class="tx-item" data-id="${tx.id}">
           <div class="tx-left">
             <div class="tx-cat-icon">${tx.categoryIcon || (isIncome ? '💵' : '💸')}</div>
             <div class="tx-meta">
-              <span class="tx-cat-name">${tx.category}</span>
-              <span class="tx-note">${tx.note ? escapeHtml(tx.note) : (isIncome ? 'Khoản thu' : 'Khoản chi')}</span>
+              <span class="tx-cat-name">${tx.category} ${debtBadge}</span>
+              <span class="tx-note">${tx.note ? escapeHtml(tx.note) : (isIncome ? (isDebt ? 'Thu hồi nợ' : 'Khoản thu') : 'Khoản chi')}</span>
             </div>
           </div>
           <div class="tx-right">
@@ -406,7 +431,9 @@ function renderStatsView() {
 
   monthTransactions.forEach(tx => {
     if (tx.type === 'income') {
-      totalIncome += tx.amount;
+      if (!isDebtRecoveryTx(tx)) {
+        totalIncome += tx.amount;
+      }
     } else {
       totalExpense += tx.amount;
       if (!expenseByCat[tx.category]) {
@@ -483,6 +510,12 @@ function deleteTransaction(id) {
   if (index !== -1) {
     const deleted = State.transactions[index];
     State.transactions.splice(index, 1);
+
+    // Nếu xóa khoản Thu hồi nợ, trừ bớt lại trong số dư ban đầu
+    if (isDebtRecoveryTx(deleted)) {
+      State.initialBalance = Math.max(0, State.initialBalance - deleted.amount);
+    }
+
     saveData();
     renderApp();
     showToast(`Đã xóa: ${deleted.category} (${formatCurrency(deleted.amount)} ₫)`);
@@ -553,6 +586,21 @@ function updateModalTypeToggle(type) {
   renderModalCategories();
 }
 
+function updateCategoryHint() {
+  const hintBox = document.getElementById('category-hint-box');
+  const submitText = document.getElementById('submit-btn-text');
+  if (!hintBox) return;
+  if (State.modalType === 'income' && State.selectedCategory && (State.selectedCategory.id === 'thu-no' || State.selectedCategory.name === 'Thu hồi nợ')) {
+    hintBox.style.display = 'block';
+    if (submitText) submitText.textContent = 'Lưu Thu Hồi Nợ (+)';
+  } else {
+    hintBox.style.display = 'none';
+    if (submitText && State.modalType === 'income') {
+      submitText.textContent = 'Cộng Vào Thu Nhập (+)';
+    }
+  }
+}
+
 function renderModalCategories() {
   const grid = document.getElementById('categories-grid');
   const list = CATEGORIES[State.modalType] || [];
@@ -572,6 +620,7 @@ function renderModalCategories() {
   });
 
   grid.innerHTML = html;
+  updateCategoryHint();
 
   // Bắt sự kiện chọn danh mục
   grid.querySelectorAll('.cat-item-btn').forEach(btn => {
@@ -580,6 +629,7 @@ function renderModalCategories() {
       btn.classList.add('selected');
       const catId = btn.dataset.catId;
       State.selectedCategory = list.find(c => c.id === catId);
+      updateCategoryHint();
     });
   });
 }
@@ -601,6 +651,7 @@ function handleSaveTransaction() {
 
   const dateVal = document.getElementById('input-date').value || getNowDateString();
   const noteVal = document.getElementById('input-note').value.trim();
+  const isDebtRecovery = (State.modalType === 'income' && (State.selectedCategory.id === 'thu-no' || State.selectedCategory.name === 'Thu hồi nợ'));
 
   const newTx = {
     id: 'tx_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
@@ -608,10 +659,16 @@ function handleSaveTransaction() {
     amount: amount,
     category: State.selectedCategory.name,
     categoryIcon: State.selectedCategory.icon,
+    categoryId: State.selectedCategory.id,
     note: noteVal,
     date: dateVal,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    isDebtRecovery: isDebtRecovery
   };
+
+  if (isDebtRecovery) {
+    State.initialBalance += amount;
+  }
 
   State.transactions.unshift(newTx);
   saveData();
@@ -625,8 +682,12 @@ function handleSaveTransaction() {
   closeTransactionModal();
   renderApp();
 
-  const actionText = State.modalType === 'income' ? 'Đã cộng thu nhập' : 'Đã ghi chi tiêu';
-  showToast(`✅ ${actionText} ${formatCurrency(amount)} ₫`);
+  if (isDebtRecovery) {
+    showToast(`🤝 Đã thu hồi nợ +${formatCurrency(amount)} ₫ (đã cộng vào số dư ví & số dư ban đầu)`);
+  } else {
+    const actionText = State.modalType === 'income' ? 'Đã cộng thu nhập' : 'Đã ghi chi tiêu';
+    showToast(`✅ ${actionText} ${formatCurrency(amount)} ₫`);
+  }
 }
 
 // =========================================================
@@ -1019,6 +1080,7 @@ function findCategoryIcon(catName, type) {
   if (norm.includes('lương')) return '💵';
   if (norm.includes('thưởng')) return '🎁';
   if (norm.includes('kinh doanh') || norm.includes('bán')) return '💼';
+  if (norm.includes('nợ') || norm.includes('vay') || norm.includes('thu hồi')) return '🤝';
   return type === 'income' ? '💵' : '💸';
 }
 
@@ -1040,6 +1102,8 @@ function normalizeTransaction(tx) {
     if (!isNaN(parsed)) createdAt = parsed;
   }
 
+  const isDebtRecovery = (type === 'income' && (tx.isDebtRecovery || category === 'Thu hồi nợ'));
+
   return {
     id: tx.id || ('tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
     type: type,
@@ -1048,7 +1112,8 @@ function normalizeTransaction(tx) {
     categoryIcon: icon,
     note: tx.note || '',
     date: cleanDate || getNowDateString(),
-    createdAt: createdAt
+    createdAt: createdAt,
+    isDebtRecovery: isDebtRecovery
   };
 }
 

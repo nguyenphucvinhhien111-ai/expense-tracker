@@ -240,9 +240,12 @@
             <div class="setting-item">
               <div class="setting-info">
                 <span class="setting-name">Số dư ban đầu</span>
-                <span class="setting-desc">Số tiền sẵn có trong ví trước khi ghi chép</span>
+                <span class="setting-desc">Số tiền sẵn có trong ví (tự cộng dồn khi thu hồi nợ)</span>
               </div>
-              <button class="setting-action-btn" id="btn-set-initial-balance">Chỉnh sửa</button>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="setting-badge" id="setting-initial-balance-val">0 ₫</span>
+                <button class="setting-action-btn" id="btn-set-initial-balance">Chỉnh sửa</button>
+              </div>
             </div>
 
             <div class="setting-item">
@@ -387,6 +390,9 @@
             <label class="form-label">Chọn danh mục</label>
             <div class="categories-grid" id="categories-grid">
               <!-- Rendered via JS based on type -->
+            </div>
+            <div id="category-hint-box" style="display: none; margin-top: 10px; font-size: 0.78rem; color: #6366f1; background: rgba(99, 102, 241, 0.08); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.2); line-height: 1.45;">
+              🤝 <strong>Thu hồi nợ:</strong> Khoản này được cộng vào <strong>Số dư khả dụng</strong> và <strong>Số dư ban đầu</strong> trong Cài đặt (không tính vào doanh thu tháng).
             </div>
           </div>
 
