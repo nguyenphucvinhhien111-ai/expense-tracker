@@ -240,6 +240,29 @@ body.theme-light .active-date-banner {
   color: #1e293b;
 }
 
+body.theme-light .debts-header-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+body.theme-light .debt-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.07);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+body.theme-light .debt-filter-btn {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.06);
+  color: #64748b;
+}
+
+body.theme-light .debt-filter-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #ffffff;
+}
+
 body.theme-light .setting-item {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.06);
@@ -1435,11 +1458,13 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 14px;
+  gap: 3px;
+  padding: 6px 8px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition);
+  flex: 1;
+  max-width: 68px;
 }
 
 .nav-item.active {
@@ -1906,4 +1931,353 @@ body.theme-dark .nav-item.active {
 .toast-message.active {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
+}
+
+/* =========================================================
+   DEBT TRACKER (SỔ NỢ) STYLES
+   ========================================================= */
+
+.debts-header-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-xl);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.debts-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.debts-summary-label {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  display: block;
+}
+
+.debts-summary-val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  margin: 2px 0 0 0;
+  letter-spacing: -0.5px;
+}
+
+.btn-create-debt {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-create-debt:active {
+  transform: scale(0.95);
+}
+
+.debts-stats-mini {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px dashed rgba(99, 102, 241, 0.2);
+  padding-top: 8px;
+}
+
+/* Filter pills */
+.debts-filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.debt-filter-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.debt-filter-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+/* Debts List */
+.debts-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.debt-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  transition: var(--transition);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.debt-card:active {
+  transform: scale(0.985);
+}
+
+.debt-card.settled {
+  opacity: 0.72;
+}
+
+.debt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.debt-person-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.debt-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+
+.debt-avatar.settled {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.debt-person-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+}
+
+.debt-status-tag {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.debt-status-tag.active {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.debt-status-tag.settled {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.debt-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.debt-amount-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  display: block;
+}
+
+.debt-remaining-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.debt-sub-stats {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.debt-progress-track {
+  height: 6px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.debt-progress-bar {
+  height: 100%;
+  background: #10b981;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.debt-card-actions {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 10px;
+}
+
+.debt-btn-action {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.debt-btn-action.add-more {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.debt-btn-action.repay {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.debt-btn-action:active {
+  transform: scale(0.96);
+}
+
+/* Timeline in Detail Modal */
+.debt-detail-overview {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.debt-detail-col span {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  display: block;
+}
+
+.debt-detail-col strong {
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin-top: 2px;
+  display: block;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+}
+
+.timeline-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.timeline-icon.lend {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.timeline-icon.repay {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.timeline-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-note {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.timeline-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.timeline-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-amt {
+  font-weight: 800;
+}
+
+.btn-delete-record {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+}
+
+.btn-delete-record:hover {
+  color: #ef4444;
 }

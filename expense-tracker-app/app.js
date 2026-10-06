@@ -15,7 +15,6 @@ const CATEGORIES = {
     { id: 'hoa-don', name: 'Điện / Nước / Net', icon: '⚡', color: '#f97316' },
     { id: 'giai-tri', name: 'Giải trí', icon: '🎬', color: '#a855f7' },
     { id: 'suc-khoe', name: 'Thuốc men', icon: '💊', color: '#ef4444' },
-    { id: 'cho-vay', name: 'Cho vay', icon: '🤝', color: '#6366f1' },
     { id: 'chi-khac', name: 'Chi tiêu khác', icon: '📝', color: '#64748b' }
   ],
   income: [
@@ -23,7 +22,6 @@ const CATEGORIES = {
     { id: 'thuong', name: 'Thưởng & Tip', icon: '🎁', color: '#f59e0b' },
     { id: 'kinh-doanh', name: 'Bán hàng / KD', icon: '💼', color: '#3b82f6' },
     { id: 'duoc-tang', name: 'Được biếu / Tặng', icon: '🧧', color: '#ec4899' },
-    { id: 'thu-no', name: 'Thu hồi nợ', icon: '🤝', color: '#8b5cf6' },
     { id: 'lai-dau-tu', name: 'Lãi & Tiết kiệm', icon: '📈', color: '#06b6d4' },
     { id: 'thu-khac', name: 'Thu nhập khác', icon: '✨', color: '#64748b' }
   ]
@@ -32,6 +30,7 @@ const CATEGORIES = {
 // State toàn cục
 const State = {
   transactions: [],
+  debts: [], // Danh sách quản lý nợ / cho vay
   initialBalance: 0,
   currentYearMonth: '', // Format 'YYYY-MM'
   selectedDateFilter: null, // Format 'YYYY-MM-DD' hoặc null (lọc theo ngày cụ thể)
@@ -40,7 +39,9 @@ const State = {
   isBalanceHidden: true, // MẶC ĐỊNH KHI VÀO APP LÀ ẨN TIỀN
   modalType: 'expense', // 'expense' | 'income'
   selectedCategory: null,
-  activeView: 'view-home'
+  activeView: 'view-home',
+  editingTxId: null, // ID giao dịch đang sửa (null nếu tạo mới)
+  activeDebtFilter: 'active' // 'active' | 'settled' | 'all'
 };
 
 // =========================================================
@@ -101,18 +102,30 @@ function showToast(message) {
 // =========================================================
 
 const STORAGE_KEY_TX = 'so_thu_chi_transactions_v1';
+const STORAGE_KEY_DEBTS = 'so_thu_chi_debts_v1';
 const STORAGE_KEY_INIT = 'so_thu_chi_initial_balance_v1';
 const STORAGE_KEY_THEME = 'so_thu_chi_theme_v1';
 
 function loadData() {
   try {
     const rawTx = localStorage.getItem(STORAGE_KEY_TX);
+    const rawDebts = localStorage.getItem(STORAGE_KEY_DEBTS);
     const rawInit = localStorage.getItem(STORAGE_KEY_INIT);
 
     if (rawTx !== null) {
       State.transactions = JSON.parse(rawTx);
     } else {
       State.transactions = [];
+    }
+
+    if (rawDebts !== null) {
+      try {
+        State.debts = JSON.parse(rawDebts);
+      } catch (e) {
+        State.debts = [];
+      }
+    } else {
+      State.debts = [];
     }
 
     if (rawInit !== null) {
@@ -133,6 +146,7 @@ function loadData() {
   } catch (err) {
     console.error('Lỗi khi đọc dữ liệu:', err);
     State.transactions = [];
+    State.debts = [];
     State.initialBalance = 0;
   }
 }
@@ -147,6 +161,7 @@ function saveData() {
 function saveDataLocally() {
   try {
     localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(State.transactions));
+    localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify(State.debts || []));
     localStorage.setItem(STORAGE_KEY_INIT, String(State.initialBalance));
   } catch (err) {
     console.error('Lỗi khi lưu dữ liệu:', err);
@@ -163,6 +178,7 @@ function renderApp() {
   renderBalanceCard();
   renderTransactionList();
   renderStatsView();
+  renderDebtsView();
 }
 
 function renderDateHeader() {
@@ -198,27 +214,35 @@ function isLoanGivenTx(tx) {
   return tx.isLoanGiven === true || (tx.type === 'expense' && (tx.category === 'Cho vay' || tx.categoryId === 'cho-vay'));
 }
 
+function getTotalDebtRemaining() {
+  let totalRemaining = 0;
+  if (!Array.isArray(State.debts)) return 0;
+  State.debts.forEach(d => {
+    const lent = (d.records || []).filter(r => r.type === 'lend').reduce((sum, r) => sum + (r.amount || 0), 0);
+    const repaid = (d.records || []).filter(r => r.type === 'repay').reduce((sum, r) => sum + (r.amount || 0), 0);
+    const remaining = Math.max(0, lent - repaid);
+    totalRemaining += remaining;
+  });
+  return totalRemaining;
+}
+
 function renderBalanceCard() {
-  // Tính tổng số dư tất cả các tháng (Số dư ban đầu + Tổng tất cả Thu - Tổng tất cả Chi)
+  // Tính tổng số dư tất cả các tháng (Số dư ban đầu + Tổng tất cả Thu - Tổng tất cả Chi - Tiền đang cho vay chưa thu hồi)
   let totalAllIncome = 0;
   let totalAllExpense = 0;
 
   State.transactions.forEach(tx => {
+    if (isDebtRecoveryTx(tx) || isLoanGivenTx(tx)) return;
     if (tx.type === 'income') {
-      // Khoản "Thu hồi nợ" đã được cộng dồn trực tiếp vào State.initialBalance nên không cộng vào totalAllIncome để tránh nhân đôi
-      if (!isDebtRecoveryTx(tx)) {
-        totalAllIncome += tx.amount;
-      }
+      totalAllIncome += tx.amount;
     }
     else if (tx.type === 'expense') {
-      // Khoản "Cho vay" đã được trừ trực tiếp khỏi State.initialBalance nên không trừ vào totalAllExpense để tránh nhân đôi
-      if (!isLoanGivenTx(tx)) {
-        totalAllExpense += tx.amount;
-      }
+      totalAllExpense += tx.amount;
     }
   });
 
-  const overallBalance = State.initialBalance + totalAllIncome - totalAllExpense;
+  const totalDebtOut = getTotalDebtRemaining();
+  const overallBalance = State.initialBalance + totalAllIncome - totalAllExpense - totalDebtOut;
 
   // Tính thu chi riêng của tháng hiện tại được chọn (DOANH THU & CHI TIÊU THÁNG TIÊU DÙNG)
   let monthIncome = 0;
@@ -226,17 +250,12 @@ function renderBalanceCard() {
 
   State.transactions.forEach(tx => {
     if (tx.date.startsWith(State.currentYearMonth)) {
+      if (isDebtRecoveryTx(tx) || isLoanGivenTx(tx)) return;
       if (tx.type === 'income') {
-        // KHÔNG CỘNG VÀO DOANH THU THÁNG NẾU LÀ THU HỒI NỢ
-        if (!isDebtRecoveryTx(tx)) {
-          monthIncome += tx.amount;
-        }
+        monthIncome += tx.amount;
       }
       else if (tx.type === 'expense') {
-        // KHÔNG CỘNG VÀO CHI TIÊU THÁNG NẾU LÀ CHO VAY
-        if (!isLoanGivenTx(tx)) {
-          monthExpense += tx.amount;
-        }
+        monthExpense += tx.amount;
       }
     }
   });
@@ -524,6 +543,16 @@ function renderTransactionList() {
 
   container.innerHTML = html;
 
+  // Gán sự kiện bấm vào giao dịch để chỉnh sửa
+  container.querySelectorAll('.tx-item').forEach(item => {
+    item.style.cursor = 'pointer';
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-delete-tx')) return;
+      const id = item.dataset.id;
+      if (id) openEditTransactionModal(id);
+    });
+  });
+
   // Gán sự kiện xóa cho từng giao dịch
   container.querySelectorAll('.btn-delete-tx').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -653,14 +682,23 @@ function deleteTransaction(id) {
 // BOTTOM SHEET MODAL (NHẬP LIỆU)
 // =========================================================
 
+// =========================================================
+// BOTTOM SHEET MODAL (NHẬP LIỆU & CHỈNH SỬA GIAO DỊCH)
+// =========================================================
+
 function openTransactionModal(defaultType = 'expense') {
+  State.editingTxId = null;
   State.modalType = defaultType;
   
   const modal = document.getElementById('modal-tx');
   const backdrop = document.getElementById('modal-backdrop');
   const sheetTitle = document.getElementById('sheet-title');
-  const submitBtn = document.getElementById('btn-save-tx');
   const submitText = document.getElementById('submit-btn-text');
+  const btnDeleteInModal = document.getElementById('btn-modal-delete-tx');
+
+  if (sheetTitle) sheetTitle.textContent = defaultType === 'income' ? 'Ghi Nhận Tiền Vào' : 'Ghi Khoản Chi Tiêu';
+  if (submitText) submitText.textContent = defaultType === 'income' ? 'Cộng Vào Thu Nhập (+)' : 'Lưu Khoản Chi Tiêu (-)';
+  if (btnDeleteInModal) btnDeleteInModal.style.display = 'none';
 
   // Cập nhật giao diện toggle type
   updateModalTypeToggle(defaultType);
@@ -683,9 +721,62 @@ function openTransactionModal(defaultType = 'expense') {
   }, 250);
 }
 
+function openEditTransactionModal(id) {
+  const tx = State.transactions.find(t => t.id === id);
+  if (!tx) return;
+
+  State.editingTxId = tx.id;
+  State.modalType = tx.type;
+
+  const modal = document.getElementById('modal-tx');
+  const backdrop = document.getElementById('modal-backdrop');
+  const sheetTitle = document.getElementById('sheet-title');
+  const submitText = document.getElementById('submit-btn-text');
+  const btnDeleteInModal = document.getElementById('btn-modal-delete-tx');
+
+  if (sheetTitle) sheetTitle.textContent = 'Chỉnh Sửa Giao Dịch';
+  if (submitText) submitText.textContent = 'Cập Nhật Thay Đổi';
+  if (btnDeleteInModal) btnDeleteInModal.style.display = 'block';
+
+  // Cập nhật giao diện toggle type
+  updateModalTypeToggle(tx.type);
+
+  // Điền giá trị cũ
+  document.getElementById('input-date').value = tx.date || getNowDateString();
+  document.getElementById('input-amount').value = formatCurrency(tx.amount);
+  document.getElementById('input-note').value = tx.note || '';
+
+  // Chọn danh mục tương ứng
+  const list = CATEGORIES[tx.type] || [];
+  const foundCat = list.find(c => c.id === tx.categoryId || c.name === tx.category) || list[0];
+  State.selectedCategory = foundCat;
+
+  renderModalCategories();
+
+  // Đánh dấu nút danh mục được chọn
+  const grid = document.getElementById('categories-grid');
+  if (grid && foundCat) {
+    grid.querySelectorAll('.cat-item-btn').forEach(btn => {
+      if (btn.dataset.catId === foundCat.id) {
+        btn.classList.add('selected');
+      } else {
+        btn.classList.remove('selected');
+      }
+    });
+  }
+
+  backdrop.classList.add('active');
+  modal.classList.add('active');
+}
+
 function closeTransactionModal() {
-  document.getElementById('modal-tx').classList.remove('active');
-  document.getElementById('modal-backdrop').classList.remove('active');
+  State.editingTxId = null;
+  const modal = document.getElementById('modal-tx');
+  const backdrop = document.getElementById('modal-backdrop');
+  const btnDeleteInModal = document.getElementById('btn-modal-delete-tx');
+  if (btnDeleteInModal) btnDeleteInModal.style.display = 'none';
+  if (modal) modal.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
 }
 
 function updateModalTypeToggle(type) {
@@ -700,59 +791,34 @@ function updateModalTypeToggle(type) {
     btnIncome.classList.add('active');
     btnExpense.classList.remove('active');
     submitBtn.className = 'btn-submit income-mode';
-    submitText.textContent = 'Cộng Vào Thu Nhập (+)';
-    sheetTitle.textContent = 'Ghi Nhận Tiền Vào';
+    if (!State.editingTxId) {
+      submitText.textContent = 'Cộng Vào Thu Nhập (+)';
+      sheetTitle.textContent = 'Ghi Nhận Tiền Vào';
+    }
   } else {
     btnExpense.classList.add('active');
     btnIncome.classList.remove('active');
     submitBtn.className = 'btn-submit expense-mode';
-    submitText.textContent = 'Lưu Khoản Chi Tiêu (-)';
-    sheetTitle.textContent = 'Ghi Khoản Chi Tiêu';
+    if (!State.editingTxId) {
+      submitText.textContent = 'Lưu Khoản Chi Tiêu (-)';
+      sheetTitle.textContent = 'Ghi Khoản Chi Tiêu';
+    }
   }
 
   renderModalCategories();
-}
-
-function updateCategoryHint() {
-  const hintBox = document.getElementById('category-hint-box');
-  const submitText = document.getElementById('submit-btn-text');
-  if (!hintBox) return;
-
-  const isDebt = State.modalType === 'income' && State.selectedCategory && (State.selectedCategory.id === 'thu-no' || State.selectedCategory.name === 'Thu hồi nợ');
-  const isLoan = State.modalType === 'expense' && State.selectedCategory && (State.selectedCategory.id === 'cho-vay' || State.selectedCategory.name === 'Cho vay');
-
-  if (isDebt) {
-    hintBox.innerHTML = '🤝 <strong>Thu hồi nợ:</strong> Khoản này được cộng vào <strong>Số dư khả dụng</strong> và <strong>Số dư ban đầu</strong> trong Cài đặt (không tính vào doanh thu tháng).';
-    hintBox.style.color = '#6366f1';
-    hintBox.style.background = 'rgba(99, 102, 241, 0.08)';
-    hintBox.style.borderColor = 'rgba(99, 102, 241, 0.2)';
-    hintBox.style.display = 'block';
-    if (submitText) submitText.textContent = 'Lưu Thu Hồi Nợ (+)';
-  } else if (isLoan) {
-    hintBox.innerHTML = '🤝 <strong>Cho vay:</strong> Khoản này được trừ trực tiếp khỏi <strong>Số dư ví</strong> và <strong>Số dư ban đầu</strong> trong Cài đặt (không tính vào chi tiêu tháng). Khi thu hồi nợ sẽ bù lại cân bằng!';
-    hintBox.style.color = '#f43f5e';
-    hintBox.style.background = 'rgba(244, 63, 94, 0.08)';
-    hintBox.style.borderColor = 'rgba(244, 63, 94, 0.2)';
-    hintBox.style.display = 'block';
-    if (submitText) submitText.textContent = 'Lưu Khoản Cho Vay (-)';
-  } else {
-    hintBox.style.display = 'none';
-    if (submitText) {
-      submitText.textContent = State.modalType === 'income' ? 'Cộng Vào Thu Nhập (+)' : 'Lưu Khoản Chi Tiêu (-)';
-    }
-  }
 }
 
 function renderModalCategories() {
   const grid = document.getElementById('categories-grid');
   const list = CATEGORIES[State.modalType] || [];
   
-  // Mặc định chọn danh mục đầu tiên
-  State.selectedCategory = list[0] || null;
+  if (!State.selectedCategory || !list.some(c => c.id === State.selectedCategory.id)) {
+    State.selectedCategory = list[0] || null;
+  }
 
   let html = '';
-  list.forEach((cat, idx) => {
-    const isSelected = idx === 0;
+  list.forEach((cat) => {
+    const isSelected = State.selectedCategory && State.selectedCategory.id === cat.id;
     html += `
       <button type="button" class="cat-item-btn ${isSelected ? 'selected' : ''}" data-cat-id="${cat.id}">
         <span class="cat-item-icon">${cat.icon}</span>
@@ -762,7 +828,6 @@ function renderModalCategories() {
   });
 
   grid.innerHTML = html;
-  updateCategoryHint();
 
   // Bắt sự kiện chọn danh mục
   grid.querySelectorAll('.cat-item-btn').forEach(btn => {
@@ -771,7 +836,6 @@ function renderModalCategories() {
       btn.classList.add('selected');
       const catId = btn.dataset.catId;
       State.selectedCategory = list.find(c => c.id === catId);
-      updateCategoryHint();
     });
   });
 }
@@ -793,9 +857,36 @@ function handleSaveTransaction() {
 
   const dateVal = document.getElementById('input-date').value || getNowDateString();
   const noteVal = document.getElementById('input-note').value.trim();
-  const isDebtRecovery = (State.modalType === 'income' && (State.selectedCategory.id === 'thu-no' || State.selectedCategory.name === 'Thu hồi nợ'));
-  const isLoanGiven = (State.modalType === 'expense' && (State.selectedCategory.id === 'cho-vay' || State.selectedCategory.name === 'Cho vay'));
 
+  // NẾU ĐANG CHỈNH SỬA GIAO DỊCH CŨ
+  if (State.editingTxId) {
+    const idx = State.transactions.findIndex(t => t.id === State.editingTxId);
+    if (idx !== -1) {
+      State.transactions[idx] = {
+        ...State.transactions[idx],
+        type: State.modalType,
+        amount: amount,
+        category: State.selectedCategory.name,
+        categoryIcon: State.selectedCategory.icon,
+        categoryId: State.selectedCategory.id,
+        note: noteVal,
+        date: dateVal
+      };
+
+      const txYearMonth = dateVal.substring(0, 7);
+      if (txYearMonth !== State.currentYearMonth) {
+        State.currentYearMonth = txYearMonth;
+      }
+
+      saveData();
+      closeTransactionModal();
+      renderApp();
+      showToast(`✅ Đã cập nhật giao dịch: ${formatCurrency(amount)} ₫`);
+      return;
+    }
+  }
+
+  // TẠO GIAO DỊCH MỚI
   const newTx = {
     id: 'tx_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
     type: State.modalType,
@@ -805,21 +896,12 @@ function handleSaveTransaction() {
     categoryId: State.selectedCategory.id,
     note: noteVal,
     date: dateVal,
-    createdAt: Date.now(),
-    isDebtRecovery: isDebtRecovery,
-    isLoanGiven: isLoanGiven
+    createdAt: Date.now()
   };
-
-  if (isDebtRecovery) {
-    State.initialBalance += amount;
-  } else if (isLoanGiven) {
-    State.initialBalance -= amount;
-  }
 
   State.transactions.unshift(newTx);
   saveData();
 
-  // Nếu giao dịch được thêm ở tháng khác tháng đang xem, tự động nhảy sang tháng đó để xem
   const txYearMonth = dateVal.substring(0, 7);
   if (txYearMonth !== State.currentYearMonth) {
     State.currentYearMonth = txYearMonth;
@@ -828,13 +910,489 @@ function handleSaveTransaction() {
   closeTransactionModal();
   renderApp();
 
-  if (isDebtRecovery) {
-    showToast(`🤝 Đã thu hồi nợ +${formatCurrency(amount)} ₫ (đã cộng vào số dư ví & số dư ban đầu)`);
-  } else if (isLoanGiven) {
-    showToast(`🤝 Đã ghi nhận cho vay -${formatCurrency(amount)} ₫ (đã trừ vào số dư ví & số dư ban đầu)`);
+  const actionText = State.modalType === 'income' ? 'Đã cộng thu nhập' : 'Đã ghi chi tiêu';
+  showToast(`✅ ${actionText} ${formatCurrency(amount)} ₫`);
+}
+
+// =========================================================
+// QUẢN LÝ SỔ NỢ (DEBT TRACKER)
+// =========================================================
+
+function renderDebtsView() {
+  const container = document.getElementById('debts-list-container');
+  const totalRemEl = document.getElementById('debts-total-remaining');
+  const totalRepaidEl = document.getElementById('debts-total-repaid');
+  const countPeopleEl = document.getElementById('debts-people-count');
+  const countActiveEl = document.getElementById('count-debts-active');
+  const countSettledEl = document.getElementById('count-debts-settled');
+
+  if (!container) return;
+  if (!Array.isArray(State.debts)) State.debts = [];
+
+  let grandTotalLent = 0;
+  let grandTotalRepaid = 0;
+  let activeCount = 0;
+  let settledCount = 0;
+
+  const debtSummaries = State.debts.map(d => {
+    const lent = (d.records || []).filter(r => r.type === 'lend').reduce((sum, r) => sum + (r.amount || 0), 0);
+    const repaid = (d.records || []).filter(r => r.type === 'repay').reduce((sum, r) => sum + (r.amount || 0), 0);
+    const remaining = Math.max(0, lent - repaid);
+    const isSettled = remaining === 0 && lent > 0;
+
+    grandTotalLent += lent;
+    grandTotalRepaid += repaid;
+    if (isSettled) settledCount++;
+    else if (lent > 0) activeCount++;
+
+    return {
+      ...d,
+      lent,
+      repaid,
+      remaining,
+      isSettled
+    };
+  });
+
+  const grandRemaining = Math.max(0, grandTotalLent - grandTotalRepaid);
+
+  if (totalRemEl) totalRemEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(grandRemaining)} ₫`;
+  if (totalRepaidEl) totalRepaidEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(grandTotalRepaid)} ₫`;
+  if (countPeopleEl) countPeopleEl.textContent = `${activeCount} người đang nợ`;
+  if (countActiveEl) countActiveEl.textContent = String(activeCount);
+  if (countSettledEl) countSettledEl.textContent = String(settledCount);
+
+  let filtered = debtSummaries;
+  if (State.activeDebtFilter === 'active') {
+    filtered = debtSummaries.filter(d => !d.isSettled);
+  } else if (State.activeDebtFilter === 'settled') {
+    filtered = debtSummaries.filter(d => d.isSettled);
+  }
+
+  if (filtered.length === 0) {
+    let emptyMsg = 'Chưa có khoản cho vay nào';
+    if (State.activeDebtFilter === 'active') emptyMsg = 'Không có ai đang nợ tiền bạn 🎉';
+    else if (State.activeDebtFilter === 'settled') emptyMsg = 'Chưa có khoản nợ nào được tất toán';
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">🤝</span>
+        <h4 class="empty-title">${emptyMsg}</h4>
+        <p class="empty-desc">Bấm <strong>"+ Cho vay mới"</strong> ở trên để ghi nhận bạn bè, người quen vay mượn tiền nhé!</p>
+      </div>
+    `;
+    return;
+  }
+
+  filtered.sort((a, b) => {
+    if (a.isSettled !== b.isSettled) return a.isSettled ? 1 : -1;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+
+  let html = '';
+  filtered.forEach(d => {
+    const initial = (d.person || 'N').trim().charAt(0).toUpperCase();
+    const pctRepaid = d.lent > 0 ? Math.min(100, Math.round((d.repaid / d.lent) * 100)) : 100;
+    const remainingDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(d.remaining)} ₫`;
+    const lentDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(d.lent)} ₫`;
+    const repaidDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(d.repaid)} ₫`;
+
+    html += `
+      <div class="debt-card ${d.isSettled ? 'settled' : ''}" data-debt-id="${d.id}">
+        <div class="debt-card-header">
+          <div class="debt-person-info">
+            <div class="debt-avatar ${d.isSettled ? 'settled' : ''}">${initial}</div>
+            <div>
+              <span class="debt-person-name">${escapeHtml(d.person)}</span>
+              <span class="debt-status-tag ${d.isSettled ? 'settled' : 'active'}">
+                ${d.isSettled ? '✅ Đã tất toán' : '⏳ Đang nợ'}
+              </span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <span class="debt-amount-label">Còn nợ:</span>
+            <span class="debt-remaining-val ${d.isSettled ? 'green-text' : 'red-text'}">${remainingDisplay}</span>
+          </div>
+        </div>
+
+        <div class="debt-progress-track">
+          <div class="debt-progress-bar" style="width: ${pctRepaid}%;"></div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 8px;">
+          <span>Đã trả: <strong class="green-text">${repaidDisplay}</strong> (${pctRepaid}%)</span>
+          <span>Tổng vay: <strong>${lentDisplay}</strong></span>
+        </div>
+
+        <div class="debt-card-actions">
+          <button type="button" class="debt-btn-action add-more" data-action="add-more" data-debt-id="${d.id}" data-person="${escapeHtml(d.person)}">
+            + Vay thêm
+          </button>
+          <button type="button" class="debt-btn-action repay" data-action="repay" data-debt-id="${d.id}">
+            Thu nợ (Trả tiền)
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.debt-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.debt-btn-action')) return;
+      const debtId = card.dataset.debtId;
+      if (debtId) openDebtDetailModal(debtId);
+    });
+  });
+
+  container.querySelectorAll('.debt-btn-action.add-more').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const person = btn.dataset.person;
+      openCreateDebtModal(person);
+    });
+  });
+
+  container.querySelectorAll('.debt-btn-action.repay').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const debtId = btn.dataset.debtId;
+      openRepayDebtModal(debtId);
+    });
+  });
+}
+
+function openCreateDebtModal(personName = '') {
+  const modal = document.getElementById('modal-debt-create');
+  const backdrop = document.getElementById('modal-debt-create-backdrop');
+  const personInput = document.getElementById('debt-input-person');
+  const amountInput = document.getElementById('debt-input-amount');
+  const dateInput = document.getElementById('debt-input-date');
+  const noteInput = document.getElementById('debt-input-note');
+  const titleEl = document.getElementById('debt-modal-title');
+  const submitTextEl = document.getElementById('debt-submit-btn-text');
+  const suggestionsEl = document.getElementById('debt-person-suggestions');
+
+  if (!modal || !backdrop) return;
+
+  personInput.value = personName;
+  amountInput.value = '';
+  dateInput.value = getNowDateString();
+  noteInput.value = '';
+
+  if (personName) {
+    titleEl.textContent = `Cho ${personName} Vay Thêm`;
+    submitTextEl.textContent = `Xác Nhận Cho ${personName} Vay Thêm (-)`;
+    if (suggestionsEl) suggestionsEl.innerHTML = '';
   } else {
-    const actionText = State.modalType === 'income' ? 'Đã cộng thu nhập' : 'Đã ghi chi tiêu';
-    showToast(`✅ ${actionText} ${formatCurrency(amount)} ₫`);
+    titleEl.textContent = 'Ghi Khoản Cho Vay Mới';
+    submitTextEl.textContent = 'Xác Nhận Cho Vay (-)';
+    if (suggestionsEl && Array.isArray(State.debts)) {
+      const knownNames = Array.from(new Set(State.debts.map(d => d.person).filter(Boolean)));
+      if (knownNames.length > 0) {
+        suggestionsEl.innerHTML = knownNames.map(name => `
+          <button type="button" class="quick-amt-chip" style="font-size: 0.75rem;" data-name="${escapeHtml(name)}">
+            👤 ${escapeHtml(name)}
+          </button>
+        `).join('');
+        suggestionsEl.querySelectorAll('button').forEach(b => {
+          b.addEventListener('click', () => {
+            personInput.value = b.dataset.name;
+            amountInput.focus();
+          });
+        });
+      } else {
+        suggestionsEl.innerHTML = '';
+      }
+    }
+  }
+
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+  backdrop.classList.add('active');
+  modal.classList.add('active');
+
+  setTimeout(() => {
+    if (!personName) personInput.focus();
+    else amountInput.focus();
+  }, 250);
+}
+
+function closeCreateDebtModal() {
+  const modal = document.getElementById('modal-debt-create');
+  const backdrop = document.getElementById('modal-debt-create-backdrop');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    backdrop.style.display = 'none';
+  }
+}
+
+function handleSaveDebtRecord() {
+  const person = document.getElementById('debt-input-person').value.trim();
+  const amountStr = document.getElementById('debt-input-amount').value;
+  const amount = parseFormattedNumber(amountStr);
+  const date = document.getElementById('debt-input-date').value || getNowDateString();
+  const note = document.getElementById('debt-input-note').value.trim();
+
+  if (!person) {
+    showToast('⚠️ Vui lòng nhập tên người vay');
+    document.getElementById('debt-input-person').focus();
+    return;
+  }
+  if (amount <= 0) {
+    showToast('⚠️ Vui lòng nhập số tiền lớn hơn 0');
+    document.getElementById('debt-input-amount').focus();
+    return;
+  }
+
+  if (!Array.isArray(State.debts)) State.debts = [];
+
+  let debt = State.debts.find(d => d.person.toLowerCase() === person.toLowerCase());
+  const newRecord = {
+    id: 'rec_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    type: 'lend',
+    amount: amount,
+    date: date,
+    note: note || 'Cho vay',
+    createdAt: Date.now()
+  };
+
+  if (debt) {
+    if (!Array.isArray(debt.records)) debt.records = [];
+    debt.records.unshift(newRecord);
+    debt.updatedAt = Date.now();
+  } else {
+    debt = {
+      id: 'debt_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      person: person,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      records: [newRecord]
+    };
+    State.debts.unshift(debt);
+  }
+
+  saveData();
+  closeCreateDebtModal();
+  renderApp();
+  showToast(`🤝 Đã ghi cho ${person} vay: -${formatCurrency(amount)} ₫`);
+}
+
+let currentRepayDebtId = null;
+
+function openRepayDebtModal(debtId) {
+  const debt = (State.debts || []).find(d => d.id === debtId);
+  if (!debt) return;
+
+  currentRepayDebtId = debtId;
+  const modal = document.getElementById('modal-debt-repay');
+  const backdrop = document.getElementById('modal-debt-repay-backdrop');
+  const personNameEl = document.getElementById('repay-person-name');
+  const remainingEl = document.getElementById('repay-remaining-amount');
+  const amountInput = document.getElementById('repay-input-amount');
+  const dateInput = document.getElementById('repay-input-date');
+  const noteInput = document.getElementById('repay-input-note');
+  const btnRepayFull = document.getElementById('btn-repay-full');
+
+  if (!modal || !backdrop) return;
+
+  const lent = (debt.records || []).filter(r => r.type === 'lend').reduce((sum, r) => sum + (r.amount || 0), 0);
+  const repaid = (debt.records || []).filter(r => r.type === 'repay').reduce((sum, r) => sum + (r.amount || 0), 0);
+  const remaining = Math.max(0, lent - repaid);
+
+  personNameEl.textContent = debt.person;
+  remainingEl.textContent = `${formatCurrency(remaining)} ₫`;
+  amountInput.value = '';
+  dateInput.value = getNowDateString();
+  noteInput.value = '';
+
+  if (btnRepayFull) {
+    btnRepayFull.onclick = () => {
+      amountInput.value = formatCurrency(remaining);
+    };
+  }
+
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+  backdrop.classList.add('active');
+  modal.classList.add('active');
+
+  setTimeout(() => {
+    amountInput.focus();
+  }, 250);
+}
+
+function closeRepayDebtModal() {
+  currentRepayDebtId = null;
+  const modal = document.getElementById('modal-debt-repay');
+  const backdrop = document.getElementById('modal-debt-repay-backdrop');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    backdrop.style.display = 'none';
+  }
+}
+
+function handleSaveRepayRecord() {
+  if (!currentRepayDebtId) return;
+  const debt = (State.debts || []).find(d => d.id === currentRepayDebtId);
+  if (!debt) return;
+
+  const amountStr = document.getElementById('repay-input-amount').value;
+  const amount = parseFormattedNumber(amountStr);
+  const date = document.getElementById('repay-input-date').value || getNowDateString();
+  const note = document.getElementById('repay-input-note').value.trim();
+
+  if (amount <= 0) {
+    showToast('⚠️ Vui lòng nhập số tiền trả lớn hơn 0');
+    document.getElementById('repay-input-amount').focus();
+    return;
+  }
+
+  const newRecord = {
+    id: 'rec_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    type: 'repay',
+    amount: amount,
+    date: date,
+    note: note || 'Trả nợ',
+    createdAt: Date.now()
+  };
+
+  if (!Array.isArray(debt.records)) debt.records = [];
+  debt.records.unshift(newRecord);
+  debt.updatedAt = Date.now();
+
+  saveData();
+  closeRepayDebtModal();
+  renderApp();
+  showToast(`✅ Đã thu hồi nợ từ ${debt.person}: +${formatCurrency(amount)} ₫`);
+}
+
+let currentDetailDebtId = null;
+
+function openDebtDetailModal(debtId) {
+  const debt = (State.debts || []).find(d => d.id === debtId);
+  if (!debt) return;
+
+  currentDetailDebtId = debtId;
+  const modal = document.getElementById('modal-debt-detail');
+  const backdrop = document.getElementById('modal-debt-detail-backdrop');
+  const titleEl = document.getElementById('detail-person-title');
+  const overviewEl = document.getElementById('debt-detail-overview');
+  const timelineEl = document.getElementById('debt-records-timeline');
+
+  if (!modal || !backdrop) return;
+
+  const lent = (debt.records || []).filter(r => r.type === 'lend').reduce((sum, r) => sum + (r.amount || 0), 0);
+  const repaid = (debt.records || []).filter(r => r.type === 'repay').reduce((sum, r) => sum + (r.amount || 0), 0);
+  const remaining = Math.max(0, lent - repaid);
+
+  titleEl.textContent = `Hồ Sơ Nợ: ${debt.person}`;
+
+  overviewEl.innerHTML = `
+    <div class="debt-detail-col">
+      <span>Tổng vay</span>
+      <strong>${formatCurrency(lent)} ₫</strong>
+    </div>
+    <div class="debt-detail-col">
+      <span>Đã trả</span>
+      <strong class="green-text">${formatCurrency(repaid)} ₫</strong>
+    </div>
+    <div class="debt-detail-col">
+      <span>Còn nợ</span>
+      <strong class="${remaining > 0 ? 'red-text' : 'green-text'}">${formatCurrency(remaining)} ₫</strong>
+    </div>
+  `;
+
+  const records = [...(debt.records || [])].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (records.length === 0) {
+    timelineEl.innerHTML = `<p style="text-align:center;font-size:0.8rem;color:var(--text-muted);padding:10px 0;">Chưa có lịch sử giao dịch nào.</p>`;
+  } else {
+    timelineEl.innerHTML = records.map(r => {
+      const isLend = r.type === 'lend';
+      return `
+        <div class="timeline-item">
+          <div class="timeline-left">
+            <div class="timeline-icon ${isLend ? 'lend' : 'repay'}">${isLend ? '💸' : '💰'}</div>
+            <div class="timeline-meta">
+              <span class="timeline-note">${escapeHtml(r.note || (isLend ? 'Cho vay' : 'Trả nợ'))}</span>
+              <span class="timeline-date">${formatDateDisplay(r.date)}</span>
+            </div>
+          </div>
+          <div class="timeline-right">
+            <span class="timeline-amt ${isLend ? 'red-text' : 'green-text'}">
+              ${isLend ? '-' : '+'}${formatCurrency(r.amount)} ₫
+            </span>
+            <button type="button" class="btn-delete-record" data-rec-id="${r.id}" title="Xóa dòng này">✕</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    timelineEl.querySelectorAll('.btn-delete-record').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const recId = btn.dataset.recId;
+        if (confirm('Bạn có chắc muốn xóa dòng giao dịch này?')) {
+          deleteDebtRecord(currentDetailDebtId, recId);
+        }
+      });
+    });
+  }
+
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+  backdrop.classList.add('active');
+  modal.classList.add('active');
+}
+
+function closeDebtDetailModal() {
+  currentDetailDebtId = null;
+  const modal = document.getElementById('modal-debt-detail');
+  const backdrop = document.getElementById('modal-debt-detail-backdrop');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    backdrop.style.display = 'none';
+  }
+}
+
+function deleteDebtRecord(debtId, recId) {
+  const debt = (State.debts || []).find(d => d.id === debtId);
+  if (!debt || !Array.isArray(debt.records)) return;
+
+  const idx = debt.records.findIndex(r => r.id === recId);
+  if (idx !== -1) {
+    debt.records.splice(idx, 1);
+    debt.updatedAt = Date.now();
+    saveData();
+    renderApp();
+    openDebtDetailModal(debtId);
+    showToast('Đã xóa dòng giao dịch');
+  }
+}
+
+function deleteWholeDebt(debtId) {
+  const idx = (State.debts || []).findIndex(d => d.id === debtId);
+  if (idx !== -1) {
+    const person = State.debts[idx].person;
+    State.debts.splice(idx, 1);
+    saveData();
+    closeDebtDetailModal();
+    renderApp();
+    showToast(`Đã xóa hồ sơ nợ của ${person}`);
   }
 }
 
@@ -858,6 +1416,8 @@ function setupEventListeners() {
 
       if (targetView === 'view-stats') {
         renderStatsView();
+      } else if (targetView === 'view-debts') {
+        renderDebtsView();
       }
     });
   });
@@ -1098,11 +1658,12 @@ function setupEventListeners() {
         version: 1,
         exportedAt: new Date().toISOString(),
         initialBalance: State.initialBalance,
-        transactions: State.transactions
+        transactions: State.transactions,
+        debts: State.debts || []
       };
       const jsonStr = JSON.stringify(backupData, null, 2);
       if (textPreviewJson) textPreviewJson.value = jsonStr;
-      if (previewJsonCount) previewJsonCount.textContent = `${State.transactions.length} giao dịch`;
+      if (previewJsonCount) previewJsonCount.textContent = `${State.transactions.length} giao dịch, ${(State.debts || []).length} hồ sơ nợ`;
       if (previewJsonBackdrop) previewJsonBackdrop.style.display = 'flex';
     });
   }
@@ -1171,12 +1732,127 @@ function setupEventListeners() {
 
   // Xóa toàn bộ dữ liệu
   document.getElementById('btn-reset-all').addEventListener('click', () => {
-    if (confirm('⚠️ Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu thu chi không? Dữ liệu đã xóa sẽ không thể phục hồi trừ khi bạn đã sao lưu!')) {
+    if (confirm('⚠️ Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu thu chi và sổ nợ không? Dữ liệu đã xóa sẽ không thể phục hồi trừ khi bạn đã sao lưu!')) {
       State.transactions = [];
+      State.debts = [];
       State.initialBalance = 0;
       saveData();
       renderApp();
       showToast('Đã xóa toàn bộ dữ liệu!');
+    }
+  });
+
+  // Xóa giao dịch từ trong modal chỉnh sửa
+  const btnDeleteTxModal = document.getElementById('btn-modal-delete-tx');
+  if (btnDeleteTxModal) {
+    btnDeleteTxModal.addEventListener('click', () => {
+      if (State.editingTxId) {
+        if (confirm('Bạn có chắc chắn muốn xóa giao dịch này không?')) {
+          const idToDelete = State.editingTxId;
+          closeTransactionModal();
+          deleteTransaction(idToDelete);
+        }
+      }
+    });
+  }
+
+  // --- SỰ KIỆN SỔ NỢ (DEBT TRACKER) ---
+  // Mở modal cho vay mới từ Sổ Nợ
+  document.getElementById('btn-open-create-debt')?.addEventListener('click', () => {
+    openCreateDebtModal();
+  });
+
+  // Bộ lọc danh sách Sổ nợ (Đang nợ / Đã trả hết / Tất cả)
+  document.querySelectorAll('.debt-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.debt-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      State.activeDebtFilter = btn.dataset.debtFilter || 'active';
+      renderDebtsView();
+    });
+  });
+
+  // Modal Cho vay: Đóng
+  document.getElementById('debt-modal-close-btn')?.addEventListener('click', closeCreateDebtModal);
+  document.getElementById('modal-debt-create-backdrop')?.addEventListener('click', closeCreateDebtModal);
+
+  // Modal Cho vay: Lưu
+  document.getElementById('btn-save-debt')?.addEventListener('click', handleSaveDebtRecord);
+
+  // Modal Cho vay: Nhập tiền tự format
+  const debtAmountInput = document.getElementById('debt-input-amount');
+  if (debtAmountInput) {
+    debtAmountInput.addEventListener('input', (e) => {
+      const raw = parseFormattedNumber(e.target.value);
+      e.target.value = raw > 0 ? formatCurrency(raw) : '';
+    });
+  }
+
+  // Modal Cho vay: Phím cộng tiền nhanh
+  document.querySelectorAll('[data-debt-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const addVal = parseInt(btn.dataset.debtAdd, 10) || 0;
+      const cur = parseFormattedNumber(debtAmountInput ? debtAmountInput.value : 0);
+      if (debtAmountInput) debtAmountInput.value = formatCurrency(cur + addVal);
+    });
+  });
+  document.getElementById('debt-btn-clear-amount')?.addEventListener('click', () => {
+    if (debtAmountInput) debtAmountInput.value = '';
+  });
+
+  // Modal Thu nợ (Repay): Đóng
+  document.getElementById('repay-modal-close-btn')?.addEventListener('click', closeRepayDebtModal);
+  document.getElementById('modal-debt-repay-backdrop')?.addEventListener('click', closeRepayDebtModal);
+
+  // Modal Thu nợ: Lưu
+  document.getElementById('btn-confirm-repay')?.addEventListener('click', handleSaveRepayRecord);
+
+  // Modal Thu nợ: Nhập tiền tự format
+  const repayAmountInput = document.getElementById('repay-input-amount');
+  if (repayAmountInput) {
+    repayAmountInput.addEventListener('input', (e) => {
+      const raw = parseFormattedNumber(e.target.value);
+      e.target.value = raw > 0 ? formatCurrency(raw) : '';
+    });
+  }
+
+  // Modal Thu nợ: Phím cộng tiền nhanh
+  document.querySelectorAll('[data-repay-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const addVal = parseInt(btn.dataset.repayAdd, 10) || 0;
+      const cur = parseFormattedNumber(repayAmountInput ? repayAmountInput.value : 0);
+      if (repayAmountInput) repayAmountInput.value = formatCurrency(cur + addVal);
+    });
+  });
+
+  // Modal Chi tiết nợ (Detail): Đóng
+  document.getElementById('detail-modal-close-btn')?.addEventListener('click', closeDebtDetailModal);
+  document.getElementById('modal-debt-detail-backdrop')?.addEventListener('click', closeDebtDetailModal);
+
+  // Modal Chi tiết nợ: Vay thêm
+  document.getElementById('btn-detail-add-more')?.addEventListener('click', () => {
+    if (currentDetailDebtId) {
+      const debt = (State.debts || []).find(d => d.id === currentDetailDebtId);
+      closeDebtDetailModal();
+      openCreateDebtModal(debt ? debt.person : '');
+    }
+  });
+
+  // Modal Chi tiết nợ: Nút Thu nợ
+  document.getElementById('btn-detail-action-repay')?.addEventListener('click', () => {
+    if (currentDetailDebtId) {
+      const debtId = currentDetailDebtId;
+      closeDebtDetailModal();
+      openRepayDebtModal(debtId);
+    }
+  });
+
+  // Modal Chi tiết nợ: Nút Xóa toàn bộ hồ sơ
+  document.getElementById('btn-detail-delete-debt')?.addEventListener('click', () => {
+    if (currentDetailDebtId) {
+      if (confirm('Bạn có chắc chắn muốn xóa toàn bộ hồ sơ nợ này không?')) {
+        deleteWholeDebt(currentDetailDebtId);
+      }
     }
   });
 
@@ -1211,7 +1887,8 @@ function exportBackupJson() {
     version: 1,
     exportedAt: new Date().toISOString(),
     initialBalance: State.initialBalance,
-    transactions: State.transactions
+    transactions: State.transactions,
+    debts: State.debts || []
   };
 
   const jsonStr = JSON.stringify(backupData, null, 2);
@@ -1222,7 +1899,7 @@ function exportBackupJson() {
 
   if (window.AndroidBridge && window.AndroidBridge.shareFile) {
     window.AndroidBridge.shareFile(fileName, jsonStr);
-    showToast(`💾 Đang chia sẻ file sao lưu (${State.transactions.length} giao dịch)...`);
+    showToast(`💾 Đang chia sẻ file sao lưu (${State.transactions.length} giao dịch, ${(State.debts || []).length} hồ sơ nợ)...`);
     return;
   }
 
@@ -1233,7 +1910,7 @@ function exportBackupJson() {
   a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`💾 Đã xuất file ${fileName} (${State.transactions.length} giao dịch)!`);
+  showToast(`💾 Đã xuất file ${fileName} (${State.transactions.length} giao dịch, ${(State.debts || []).length} hồ sơ nợ)!`);
 }
 
 function exportCsv() {
@@ -1326,17 +2003,18 @@ function applyRestoredData(data) {
     showToast('❌ Dữ liệu không đúng định dạng sao lưu!');
     return false;
   }
-  if (State.transactions.length > 0) {
-    const ok = confirm(`Khôi phục sẽ thay thế ${State.transactions.length} giao dịch hiện tại bằng ${data.transactions.length} giao dịch từ bản sao lưu. Bạn có muốn tiếp tục?`);
+  if (State.transactions.length > 0 || (State.debts && State.debts.length > 0)) {
+    const ok = confirm(`Khôi phục sẽ thay thế dữ liệu hiện tại bằng ${data.transactions.length} giao dịch và ${(data.debts || []).length} hồ sơ nợ từ bản sao lưu. Bạn có muốn tiếp tục?`);
     if (!ok) return false;
   }
   State.transactions = data.transactions.map(normalizeTransaction);
+  State.debts = Array.isArray(data.debts) ? data.debts : [];
   if (typeof data.initialBalance === 'number' || !isNaN(Number(data.initialBalance))) {
     State.initialBalance = Number(data.initialBalance) || 0;
   }
   saveData();
   renderApp();
-  showToast(`✅ Đã khôi phục thành công ${State.transactions.length} giao dịch!`);
+  showToast(`✅ Đã khôi phục thành công ${State.transactions.length} giao dịch & ${State.debts.length} hồ sơ nợ!`);
   return true;
 }
 
@@ -1518,6 +2196,7 @@ async function syncToCloud() {
       email: currentUser.email,
       initialBalance: State.initialBalance,
       transactions: State.transactions,
+      debts: State.debts || [],
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       appVersion: '1.0.0'
     }, { merge: true });
@@ -1546,9 +2225,10 @@ async function syncFromCloud(user) {
     if (docSnap.exists) {
       const data = docSnap.data();
       if (Array.isArray(data.transactions)) {
-        if (State.transactions.length === 0) {
+        if (State.transactions.length === 0 && (!State.debts || State.debts.length === 0)) {
           // Máy chưa có dữ liệu, nạp luôn từ đám mây
           State.transactions = data.transactions;
+          State.debts = Array.isArray(data.debts) ? data.debts : [];
           if (typeof data.initialBalance === 'number') {
             State.initialBalance = data.initialBalance;
           }
@@ -1557,9 +2237,10 @@ async function syncFromCloud(user) {
           showToast(`☁️ Đã đồng bộ ${data.transactions.length} giao dịch từ đám mây!`);
         } else {
           // Máy đã có dữ liệu, xác nhận khôi phục
-          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch đã lưu. Bạn có muốn tải về và khôi phục vào thiết bị này không?`);
+          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch & ${(data.debts || []).length} hồ sơ nợ. Bạn có muốn tải về và khôi phục vào thiết bị này không?`);
           if (ok) {
             State.transactions = data.transactions;
+            State.debts = Array.isArray(data.debts) ? data.debts : [];
             if (typeof data.initialBalance === 'number') {
               State.initialBalance = data.initialBalance;
             }

@@ -198,6 +198,38 @@
           </div>
         </section>
 
+        <!-- VIEW: DEBT TRACKER (SỔ NỢ) -->
+        <section id="view-debts" class="app-view">
+          <div class="debts-header-card">
+            <div class="debts-summary-row">
+              <div class="debts-summary-item">
+                <span class="debts-summary-label">Tổng tiền đang cho vay</span>
+                <h3 class="debts-summary-val red-text" id="debts-total-remaining">0 ₫</h3>
+              </div>
+              <button type="button" class="btn-create-debt" id="btn-open-create-debt">
+                <span>+ Cho vay mới</span>
+              </button>
+            </div>
+            <div class="debts-stats-mini">
+              <span>Đã thu hồi: <strong class="green-text" id="debts-total-repaid">0 ₫</strong></span>
+              <span>•</span>
+              <span id="debts-people-count">0 người đang nợ</span>
+            </div>
+          </div>
+
+          <!-- DEBTS FILTER TABS -->
+          <div class="debts-filter-row">
+            <button class="debt-filter-btn active" data-debt-filter="active">Đang nợ (<span id="count-debts-active">0</span>)</button>
+            <button class="debt-filter-btn" data-debt-filter="settled">Đã trả hết (<span id="count-debts-settled">0</span>)</button>
+            <button class="debt-filter-btn" data-debt-filter="all">Tất cả</button>
+          </div>
+
+          <!-- DEBTS LIST CONTAINER -->
+          <div class="debts-list-container" id="debts-list-container">
+            <!-- Rendered via JS -->
+          </div>
+        </section>
+
         <!-- VIEW 3: SETTINGS & BACKUP (CÀI ĐẶT & SAO LƯU) -->
         <section id="view-settings" class="app-view">
           <!-- CLOUD SYNC & GOOGLE ACCOUNT CARD -->
@@ -341,6 +373,13 @@
           <span class="nav-label">Thu Chi</span>
         </button>
 
+        <button class="nav-item" data-view="view-debts" id="nav-btn-debts">
+          <span class="nav-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          </span>
+          <span class="nav-label">Sổ Nợ</span>
+        </button>
+
         <!-- Floating Add Center Button -->
         <button class="nav-fab-btn" id="btn-fab-add" aria-label="Thêm khoản thu chi">
           <div class="fab-circle">
@@ -410,9 +449,6 @@
             <div class="categories-grid" id="categories-grid">
               <!-- Rendered via JS based on type -->
             </div>
-            <div id="category-hint-box" style="display: none; margin-top: 10px; font-size: 0.78rem; color: #6366f1; background: rgba(99, 102, 241, 0.08); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.2); line-height: 1.45;">
-              🤝 <strong>Thu hồi nợ:</strong> Khoản này được cộng vào <strong>Số dư khả dụng</strong> và <strong>Số dư ban đầu</strong> trong Cài đặt (không tính vào doanh thu tháng).
-            </div>
           </div>
 
           <!-- NOTE (OPTIONAL) -->
@@ -427,10 +463,13 @@
             <input type="date" id="input-date" class="form-input" />
           </div>
 
-          <!-- SUBMIT BUTTON -->
-          <div class="modal-actions">
-            <button type="button" class="btn-submit" id="btn-save-tx">
+          <!-- SUBMIT & DELETE BUTTONS -->
+          <div class="modal-actions" style="display: flex; gap: 10px;">
+            <button type="button" class="btn-submit" id="btn-save-tx" style="flex: 1;">
               <span id="submit-btn-text">Lưu Khoản Chi</span>
+            </button>
+            <button type="button" class="btn-modal-delete" id="btn-modal-delete-tx" style="display: none; background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-lg); padding: 0 16px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">
+              Xóa
             </button>
           </div>
         </div>
@@ -500,6 +539,154 @@
             <button class="dialog-btn primary" id="btn-auth-submit" style="width: 100%; padding: 12px; font-weight: 800;">Đăng nhập</button>
             <button class="dialog-btn secondary" id="btn-auth-toggle-mode" style="width: 100%; padding: 10px; font-size: 0.8rem;">Chưa có tài khoản? Nhấn để Đăng ký mới</button>
             <button class="dialog-btn secondary" id="btn-auth-cancel" style="width: 100%; padding: 8px; font-size: 0.8rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer;">Hủy bỏ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: CREATE / ADD DEBT (CHO VAY / VAY THÊM) -->
+      <div class="bottom-sheet-backdrop" id="modal-debt-create-backdrop" style="display: none;"></div>
+      <div class="bottom-sheet" id="modal-debt-create" style="display: none;">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title" id="debt-modal-title">Ghi Khoản Cho Vay</h3>
+          <button class="sheet-close-btn" id="debt-modal-close-btn" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <!-- PERSON INPUT -->
+          <div class="form-group">
+            <label class="form-label">Người vay (Tên bạn bè / đối tác) *</label>
+            <input type="text" id="debt-input-person" class="form-input" placeholder="Ví dụ: Tuấn, Lan, Nam..." autocomplete="off" />
+            <div id="debt-person-suggestions" class="quick-tags-row" style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
+
+          <!-- AMOUNT INPUT -->
+          <div class="form-group amount-group">
+            <label class="form-label">Số tiền cho vay (VNĐ) *</label>
+            <div class="amount-input-box">
+              <input type="text" inputmode="numeric" id="debt-input-amount" placeholder="0" class="amount-field" autocomplete="off" />
+              <span class="amount-suffix">₫</span>
+            </div>
+            <!-- QUICK AMOUNT PILLS -->
+            <div class="quick-amounts-bar">
+              <button type="button" class="quick-amt-chip" data-debt-add="100000">+100k</button>
+              <button type="button" class="quick-amt-chip" data-debt-add="200000">+200k</button>
+              <button type="button" class="quick-amt-chip" data-debt-add="500000">+500k</button>
+              <button type="button" class="quick-amt-chip" data-debt-add="1000000">+1tr</button>
+              <button type="button" class="quick-amt-chip" data-debt-add="2000000">+2tr</button>
+              <button type="button" class="quick-amt-chip" data-debt-add="5000000">+5tr</button>
+              <button type="button" class="quick-amt-chip clear-amt" id="debt-btn-clear-amount">Xóa</button>
+            </div>
+          </div>
+
+          <!-- DATE SELECTOR -->
+          <div class="form-group">
+            <label class="form-label">Ngày cho vay</label>
+            <input type="date" id="debt-input-date" class="form-input" />
+          </div>
+
+          <!-- NOTE (OPTIONAL) -->
+          <div class="form-group">
+            <label class="form-label">Ghi chú (Tùy chọn)</label>
+            <input type="text" id="debt-input-note" class="form-input" placeholder="Ví dụ: Mượn đóng học phí, mượn sửa xe..." />
+          </div>
+
+          <!-- SUBMIT BUTTON -->
+          <div class="modal-actions">
+            <button type="button" class="btn-submit expense-mode" id="btn-save-debt">
+              <span id="debt-submit-btn-text">Xác Nhận Cho Vay (-)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: REPAY DEBT (THU NỢ - TRẢ BỚT / TRẢ HẾT) -->
+      <div class="bottom-sheet-backdrop" id="modal-debt-repay-backdrop" style="display: none;"></div>
+      <div class="bottom-sheet" id="modal-debt-repay" style="display: none;">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title">Thu Hồi Nợ (Người Trả Tiền)</h3>
+          <button class="sheet-close-btn" id="repay-modal-close-btn" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <!-- PERSON SUMMARY INFO -->
+          <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">Người trả tiền:</span>
+              <strong id="repay-person-name" style="font-size: 1.05rem; color: var(--text-primary);">--</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary); display: block;">Còn nợ hiện tại:</span>
+              <strong id="repay-remaining-amount" class="red-text" style="font-size: 1rem;">0 ₫</strong>
+            </div>
+          </div>
+
+          <!-- REPAY AMOUNT INPUT -->
+          <div class="form-group amount-group">
+            <label class="form-label">Số tiền trả lần này (VNĐ) *</label>
+            <div class="amount-input-box">
+              <input type="text" inputmode="numeric" id="repay-input-amount" placeholder="0" class="amount-field" autocomplete="off" />
+              <span class="amount-suffix">₫</span>
+            </div>
+            <!-- QUICK REPAY BUTTONS -->
+            <div class="quick-amounts-bar">
+              <button type="button" class="quick-amt-chip" id="btn-repay-full" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700;">Trả hết toàn bộ</button>
+              <button type="button" class="quick-amt-chip" data-repay-add="100000">+100k</button>
+              <button type="button" class="quick-amt-chip" data-repay-add="200000">+200k</button>
+              <button type="button" class="quick-amt-chip" data-repay-add="500000">+500k</button>
+              <button type="button" class="quick-amt-chip" data-repay-add="1000000">+1tr</button>
+            </div>
+          </div>
+
+          <!-- REPAY DATE -->
+          <div class="form-group">
+            <label class="form-label">Ngày nhận tiền</label>
+            <input type="date" id="repay-input-date" class="form-input" />
+          </div>
+
+          <!-- NOTE (OPTIONAL) -->
+          <div class="form-group">
+            <label class="form-label">Ghi chú (Tùy chọn)</label>
+            <input type="text" id="repay-input-note" class="form-input" placeholder="Ví dụ: Chuyển khoản Vietcombank, trả trước một ít..." />
+          </div>
+
+          <!-- SUBMIT BUTTON -->
+          <div class="modal-actions">
+            <button type="button" class="btn-submit income-mode" id="btn-confirm-repay">
+              <span>Xác Nhận Thu Nợ (+)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: DEBT DETAIL & TIMELINE -->
+      <div class="bottom-sheet-backdrop" id="modal-debt-detail-backdrop" style="display: none;"></div>
+      <div class="bottom-sheet" id="modal-debt-detail" style="display: none;">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title" id="detail-person-title">Chi Tiết Nợ</h3>
+          <button class="sheet-close-btn" id="detail-modal-close-btn" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <div class="debt-detail-overview" id="debt-detail-overview">
+            <!-- Dynamic stats summary -->
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin: 14px 0 8px 0;">
+            <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">Lịch sử vay & trả</h4>
+            <button type="button" id="btn-detail-add-more" style="background: none; border: none; color: #6366f1; font-size: 0.8rem; font-weight: 700; cursor: pointer;">+ Vay thêm</button>
+          </div>
+
+          <div class="debt-records-timeline" id="debt-records-timeline" style="max-height: 220px; overflow-y: auto;">
+            <!-- Dynamic timeline items -->
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px; display: flex; gap: 8px;">
+            <button type="button" class="btn-submit income-mode" id="btn-detail-action-repay" style="flex: 2;">
+              <span>Thu Nợ / Người Này Trả Tiền (+)</span>
+            </button>
+            <button type="button" class="btn-modal-delete" id="btn-detail-delete-debt" style="flex: 1; background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-lg); font-weight: 700; font-size: 0.8rem; cursor: pointer;">
+              Xóa hồ sơ
+            </button>
           </div>
         </div>
       </div>
