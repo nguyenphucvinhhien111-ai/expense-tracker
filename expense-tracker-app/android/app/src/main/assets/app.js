@@ -481,7 +481,7 @@ function renderDateFilterUI() {
   if (isRangeActive) {
     box.classList.add('active');
     clearBtn.style.display = 'flex';
-    textEl.textContent = State.dateRange.label || 'Đang lọc';
+    textEl.textContent = 'Đang lọc';
 
     if (banner && bannerText) {
       banner.style.display = 'flex';
@@ -490,6 +490,7 @@ function renderDateFilterUI() {
   } else if (isSingleActive) {
     box.classList.add('active');
     clearBtn.style.display = 'flex';
+    textEl.textContent = 'Đang lọc';
 
     const todayStr = getNowDateString();
     const yesterdayStr = (() => {
@@ -505,8 +506,6 @@ function renderDateFilterUI() {
       displayLabel = `Hôm qua (${displayLabel})`;
     }
 
-    textEl.textContent = displayLabel;
-
     if (banner && bannerText) {
       banner.style.display = 'flex';
       bannerText.textContent = `${displayLabel} • ${getDayOfWeekName(State.selectedDateFilter)}`;
@@ -514,7 +513,7 @@ function renderDateFilterUI() {
   } else {
     box.classList.remove('active');
     clearBtn.style.display = 'none';
-    textEl.textContent = 'Lọc ngày';
+    textEl.textContent = 'Lọc';
     if (banner) banner.style.display = 'none';
   }
 }
@@ -2430,8 +2429,8 @@ async function syncFromCloud(user) {
       const data = docSnap.data();
       if (Array.isArray(data.transactions)) {
         if (State.transactions.length === 0 && (!State.debts || State.debts.length === 0)) {
-          // Máy chưa có dữ liệu, nạp luôn từ đám mây
-          State.transactions = data.transactions;
+          // Máy chưa có dữ liệu, nạp luôn từ đám mây (hoàn toàn tự động, im lặng khi mở app)
+          State.transactions = data.transactions.map(normalizeTransaction);
           State.debts = Array.isArray(data.debts) ? data.debts : [];
           if (typeof data.initialBalance === 'number') {
             State.initialBalance = data.initialBalance;
@@ -2440,21 +2439,8 @@ async function syncFromCloud(user) {
           renderApp();
           showToast(`☁️ Đã đồng bộ ${data.transactions.length} giao dịch từ đám mây!`);
         } else {
-          // Máy đã có dữ liệu, xác nhận khôi phục
-          const ok = confirm(`Đám mây có ${data.transactions.length} giao dịch & ${(data.debts || []).length} hồ sơ nợ. Bạn có muốn tải về và khôi phục vào thiết bị này không?`);
-          if (ok) {
-            State.transactions = data.transactions;
-            State.debts = Array.isArray(data.debts) ? data.debts : [];
-            if (typeof data.initialBalance === 'number') {
-              State.initialBalance = data.initialBalance;
-            }
-            saveDataLocally();
-            renderApp();
-            showToast('☁️ Đã khôi phục dữ liệu từ đám mây!');
-          } else {
-            // Đẩy dữ liệu hiện tại lên đám mây
-            await syncToCloud();
-          }
+          // Máy đã có dữ liệu: đồng bộ ngầm an toàn, TUYỆT ĐỐI KHÔNG hiện popup confirm() làm phiền khi mở app!
+          await syncToCloud();
         }
       }
     } else {
@@ -2473,6 +2459,68 @@ async function syncFromCloud(user) {
       showToast('❌ Chưa tạo Firestore Database trên Firebase Console!');
     }
   }
+}
+
+let pendingCloudData = null;
+
+async function openCloudRestoreModal() {
+  if (!firestoreDb || !currentUser) {
+    showToast('⚠️ Vui lòng đăng nhập tài khoản đám mây trước!');
+    return;
+  }
+  try {
+    showToast('Đang kiểm tra bản sao lưu trên đám mây...');
+    const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      showToast('⚠️ Chưa có bản sao lưu nào trên đám mây!');
+      return;
+    }
+    const data = docSnap.data();
+    if (!Array.isArray(data.transactions)) {
+      showToast('⚠️ Dữ liệu đám mây không đúng định dạng!');
+      return;
+    }
+
+    pendingCloudData = data;
+    const txCount = (data.transactions || []).length;
+    const debtCount = (data.debts || []).length;
+    const initBal = Number(data.initialBalance) || 0;
+
+    const txCountEl = document.getElementById('cloud-restore-tx-count');
+    const debtCountEl = document.getElementById('cloud-restore-debt-count');
+    const initBalEl = document.getElementById('cloud-restore-init-bal');
+    const backdrop = document.getElementById('dialog-cloud-restore-backdrop');
+
+    if (txCountEl) txCountEl.textContent = `${txCount} giao dịch`;
+    if (debtCountEl) debtCountEl.textContent = `${debtCount} người`;
+    if (initBalEl) initBalEl.textContent = `${formatCurrency(initBal)} ₫`;
+
+    if (backdrop) backdrop.style.display = 'flex';
+  } catch (err) {
+    console.error('Lỗi kiểm tra sao lưu mây:', err);
+    showToast('❌ Không thể tải thông tin sao lưu từ đám mây!');
+  }
+}
+
+function closeCloudRestoreModal() {
+  pendingCloudData = null;
+  const backdrop = document.getElementById('dialog-cloud-restore-backdrop');
+  if (backdrop) backdrop.style.display = 'none';
+}
+
+function executeCloudRestore() {
+  if (!pendingCloudData) return;
+  const data = pendingCloudData;
+  State.transactions = (data.transactions || []).map(normalizeTransaction);
+  State.debts = Array.isArray(data.debts) ? data.debts : [];
+  if (typeof data.initialBalance === 'number' || !isNaN(Number(data.initialBalance))) {
+    State.initialBalance = Number(data.initialBalance) || 0;
+  }
+  saveDataLocally();
+  renderApp();
+  closeCloudRestoreModal();
+  showToast(`🎉 Đã khôi phục thành công ${State.transactions.length} giao dịch & ${State.debts.length} hồ sơ nợ!`);
 }
 
 function setupCloudEventListeners() {
@@ -2642,6 +2690,17 @@ function setupCloudEventListeners() {
       }
     });
   }
+
+  // Nút Tải về máy từ đám mây (Mở modal xác nhận đẹp mắt)
+  const btnCloudRestore = document.getElementById('btn-cloud-restore');
+  if (btnCloudRestore) {
+    btnCloudRestore.addEventListener('click', openCloudRestoreModal);
+  }
+  document.getElementById('btn-cancel-cloud-restore')?.addEventListener('click', closeCloudRestoreModal);
+  document.getElementById('btn-confirm-cloud-restore')?.addEventListener('click', executeCloudRestore);
+  document.getElementById('dialog-cloud-restore-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'dialog-cloud-restore-backdrop') closeCloudRestoreModal();
+  });
 
   // Nút Đăng xuất
   const btnLogout = document.getElementById('btn-logout');

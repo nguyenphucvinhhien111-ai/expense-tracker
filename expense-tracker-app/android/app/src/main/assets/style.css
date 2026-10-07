@@ -838,6 +838,8 @@ html, body {
 
 .search-box input {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
@@ -857,6 +859,7 @@ html, body {
   cursor: pointer;
   font-size: 0.8rem;
   padding: 2px 6px;
+  flex-shrink: 0;
 }
 
 /* Search & Date Filter Row */
@@ -864,6 +867,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .search-filter-row .search-box {
@@ -884,6 +888,15 @@ html, body {
   transition: var(--transition);
   flex-shrink: 0;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.date-filter-box .date-text {
+  font-size: 0.8rem;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .date-filter-box:hover {

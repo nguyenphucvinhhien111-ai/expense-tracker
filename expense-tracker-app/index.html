@@ -145,7 +145,7 @@
               <div class="date-filter-box" id="date-filter-box" title="Bấm để lọc theo khoảng ngày (quý, nửa năm, năm...)">
                 <button type="button" class="btn-date-filter" id="btn-date-filter" aria-label="Lọc theo khoảng ngày">
                   <span class="date-icon">📅</span>
-                  <span id="date-filter-text" class="date-text">Lọc ngày</span>
+                  <span id="date-filter-text" class="date-text">Lọc</span>
                 </button>
                 <button type="button" class="btn-clear-date" id="btn-clear-date" title="Xóa lọc ngày, xem cả tháng" style="display: none;" aria-label="Xóa lọc ngày">✕</button>
               </div>
@@ -273,12 +273,17 @@
                   </div>
                 </div>
               </div>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" id="btn-manual-sync" class="setting-action-btn primary" style="flex: 1; padding: 10px; font-size: 0.82rem; background: #6366f1;">
-                  🔄 Đồng bộ ngay
-                </button>
-                <button type="button" id="btn-logout" class="setting-action-btn" style="padding: 10px 14px; font-size: 0.82rem;">
-                  Đăng xuất
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" id="btn-manual-sync" class="setting-action-btn primary" style="flex: 1; padding: 10px; font-size: 0.82rem; background: #6366f1;">
+                    🔄 Tải lên mây
+                  </button>
+                  <button type="button" id="btn-cloud-restore" class="setting-action-btn" style="flex: 1; padding: 10px; font-size: 0.82rem; background: rgba(99, 102, 241, 0.15); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3);">
+                    ☁️ Tải về máy
+                  </button>
+                </div>
+                <button type="button" id="btn-logout" class="setting-action-btn" style="width: 100%; padding: 8px; font-size: 0.8rem; background: transparent; color: var(--text-muted); border-color: var(--border-color);">
+                  Đăng xuất tài khoản
                 </button>
               </div>
             </div>
@@ -582,6 +587,46 @@
             <button class="dialog-btn primary" id="btn-auth-submit" style="width: 100%; padding: 12px; font-weight: 800;">Đăng nhập</button>
             <button class="dialog-btn secondary" id="btn-auth-toggle-mode" style="width: 100%; padding: 10px; font-size: 0.8rem;">Chưa có tài khoản? Nhấn để Đăng ký mới</button>
             <button class="dialog-btn secondary" id="btn-auth-cancel" style="width: 100%; padding: 8px; font-size: 0.8rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer;">Hủy bỏ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: CONFIRM CLOUD RESTORE (ĐẸP MẮT THEO THIẾT KẾ APP) -->
+      <div class="modal-dialog-backdrop" id="dialog-cloud-restore-backdrop" style="display: none;">
+        <div class="modal-dialog" style="max-width: 360px;">
+          <div style="text-align: center; margin-bottom: 14px;">
+            <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(99, 102, 241, 0.15); color: #6366f1; font-size: 1.6rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px auto; border: 2px solid rgba(99, 102, 241, 0.3);">
+              ☁️
+            </div>
+            <h4 class="dialog-title" style="margin: 0 0 6px 0; font-size: 1.1rem;">Khôi Phục Từ Đám Mây?</h4>
+            <p class="dialog-desc" style="font-size: 0.82rem; margin: 0; line-height: 1.45;">
+              Bản sao lưu trên đám mây của bạn gồm:
+            </p>
+          </div>
+
+          <!-- Summary card -->
+          <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 12px 14px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">Giao dịch thu chi:</span>
+              <strong id="cloud-restore-tx-count" style="font-size: 0.95rem; color: var(--text-primary);">0 giao dịch</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">Hồ sơ sổ nợ:</span>
+              <strong id="cloud-restore-debt-count" style="font-size: 0.95rem; color: var(--text-primary);">0 người</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">Số dư ban đầu:</span>
+              <strong id="cloud-restore-init-bal" class="green-text" style="font-size: 0.9rem;">0 ₫</strong>
+            </div>
+          </div>
+
+          <p style="font-size: 0.74rem; color: var(--text-muted); margin: 0 0 16px 0; line-height: 1.4; text-align: center;">
+            ⚠️ Dữ liệu tải về sẽ thay thế dữ liệu hiện tại trên thiết bị này.
+          </p>
+
+          <div class="dialog-buttons" style="display: flex; gap: 8px;">
+            <button type="button" class="dialog-btn secondary" id="btn-cancel-cloud-restore" style="flex: 1; padding: 11px; font-size: 0.82rem;">Hủy bỏ</button>
+            <button type="button" class="dialog-btn primary" id="btn-confirm-cloud-restore" style="flex: 1; padding: 11px; font-size: 0.82rem; font-weight: 800; background: #6366f1;">Tải về ngay</button>
           </div>
         </div>
       </div>
