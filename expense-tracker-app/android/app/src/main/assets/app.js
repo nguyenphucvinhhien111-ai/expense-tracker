@@ -1725,6 +1725,37 @@ function switchView(targetView) {
   }
 }
 
+async function postToGemini(url, prompt, useSearch = true) {
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+  if (useSearch) {
+    payload.tools = [{ googleSearch: {} }];
+  } else {
+    payload.generationConfig = { responseMimeType: 'application/json' };
+  }
+
+  let response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  // Nếu bật search bị lỗi (ví dụ quota search hoặc model chưa bật grounding), tự động fallback gọi chuẩn
+  if (!response.ok && useSearch) {
+    console.warn('Google Search grounding error, retrying without search grounding...');
+    delete payload.tools;
+    payload.generationConfig = { responseMimeType: 'application/json' };
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  return response;
+}
+
 async function callGeminiAppraisal(assetName) {
   const apiKey = State.geminiApiKey || localStorage.getItem(STORAGE_KEY_GEMINI_KEY) || '';
   if (!apiKey) {
@@ -1736,26 +1767,23 @@ async function callGeminiAppraisal(assetName) {
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
-Hãy cập nhật giá thật chính xác theo thị trường thực tế của ngày hôm nay, đặc biệt là giá vàng và đồ công nghệ/xe máy.
-Hãy thẩm định giá trị thị trường hiện tại hợp lý bằng tiền VNĐ cho: "${assetName}".
-Lưu ý quan trọng: Nếu tài sản là vàng hoặc kim loại quý mà người dùng không ghi rõ khối lượng (ví dụ chỉ ghi "vàng 9999"), hãy ước tính theo 1 chỉ vàng nhẫn 9999 tiêu chuẩn (theo thời giá ngày ${realtimeNow}) và ghi rõ trong "note" là "Ước tính theo 1 chỉ vàng 9999 (bấm vào thẻ để giải thích thêm khối lượng cho AI)".
-Yêu cầu bắt buộc: Chỉ trả về duy nhất 1 JSON object không kèm markdown với 2 trường:
+HÃY DÙNG CÔNG CỤ TÌM KIẾM (GOOGLE SEARCH) để tra cứu bảng giá thị trường mới nhất tại Việt Nam của tài sản này hôm nay trước khi đưa ra mức giá!
+Đặc biệt:
+- Nếu là VÀNG (vàng 9999, vàng nhẫn trơn, vàng miếng SJC, PNJ, Doji): Hãy tra cứu giá vàng ngày hôm nay. Nếu người dùng không ghi khối lượng, hãy tính theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay, và ghi rõ trong note: "Ước tính theo 1 chỉ vàng 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
+- Nếu là xe máy, điện thoại, đồ cũ: Hãy tra cứu giá bán cũ trung bình của dòng máy/đời xe này.
+
+Tài sản cần thẩm định: "${assetName}".
+
+Yêu cầu bắt buộc: Trả về duy nhất 1 JSON object dạng:
+\`\`\`json
 {
-  "price": 14000000,
-  "note": "Giá tham khảo hàng cũ chạy tốt khoảng 12-16 triệu"
+  "price": 12000000,
+  "note": "Giá vàng nhẫn 9999 hôm nay khoảng 12.6 - 13.2 triệu/chỉ"
 }
+\`\`\`
 Lưu ý "price" phải là số nguyên (VNĐ), "note" là giải thích ngắn gọn dưới 35 từ.`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json'
-      }
-    })
-  });
+  const response = await postToGemini(url, prompt, true);
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
@@ -1794,6 +1822,8 @@ async function callGeminiChatAppraisal(asset, userMessage) {
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.
+HÃY DÙNG GOOGLE SEARCH để tra cứu giá thị trường thực tế mới nhất nếu cần thiết.
+
 Tài sản đang thẩm định: "${asset.name}".
 Giá ước tính trước đó: ${asset.price || 0} VNĐ.
 Ghi chú trước đó: "${asset.note || ''}".
@@ -1806,27 +1836,21 @@ Người dùng vừa nhắn thêm thông tin chi tiết / giải thích sự tì
 
 Nhiệm vụ của bạn:
 1. Đọc kỹ thông tin người dùng cung cấp (ví dụ: khối lượng cụ thể như 1.3 chỉ/lượng vàng, giá mua thực tế mới mua, tình trạng, hóa đơn, số km đã chạy, linh kiện...).
-2. Cập nhật lại giá thị trường ("price") chính xác và hợp lý nhất bằng tiền VNĐ tính đến thời điểm hiện tại ${realtimeNow} (phải là số nguyên). Nếu người dùng nói giá mua thực tế gần đây (ví dụ: vàng 9999 mới mua 12tr là 1.3 chỉ), hãy công nhận và cập nhật giá phản ánh đúng giá trị thực tế theo thông tin người dùng đưa ra.
-3. Viết câu phản hồi ("reply") thân thiện, thông minh, ngắn gọn (dưới 50 từ), giải thích vì sao bạn cập nhật giá như vậy cho người dùng hiểu.
-4. Tóm tắt ghi chú ngắn gọn ("note") dưới 25 từ cho thẻ tài sản.
+2. Dùng Google Search nếu cần kiểm tra giá vàng hoặc giá thị trường hiện tại.
+3. Cập nhật lại giá thị trường ("price") chính xác và hợp lý nhất bằng tiền VNĐ tính đến thời điểm hiện tại ${realtimeNow} (phải là số nguyên). Nếu người dùng nói giá mua thực tế gần đây (ví dụ: vàng 9999 mới mua 12tr là 1.3 chỉ), hãy công nhận và cập nhật giá phản ánh đúng giá trị thực tế theo thông tin người dùng đưa ra.
+4. Viết câu phản hồi ("reply") thân thiện, thông minh, ngắn gọn (dưới 50 từ), giải thích vì sao bạn cập nhật giá như vậy cho người dùng hiểu.
+5. Tóm tắt ghi chú ngắn gọn ("note") dưới 25 từ cho thẻ tài sản.
 
-Yêu cầu bắt buộc: Trả về duy nhất 1 JSON object:
+Yêu cầu bắt buộc: Trả về 1 JSON object:
+\`\`\`json
 {
   "price": 12000000,
   "reply": "Dạ em đã hiểu rõ! Với 12 triệu mới mua (tương đương khoảng 1.3 - 1.4 chỉ hoặc tính cả tiền công), em đã cập nhật lại giá tài sản thành 12.000.000 ₫ cho mình rồi ạ.",
   "note": "1.3 chỉ vàng 9999 mới mua 12tr (đã cập nhật theo thực tế)"
-}`;
+}
+\`\`\``;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json'
-      }
-    })
-  });
+  const response = await postToGemini(url, prompt, true);
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
