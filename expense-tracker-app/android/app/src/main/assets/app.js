@@ -45,6 +45,8 @@ const State = {
   editingTxId: null, // ID giao dịch đang sửa (null nếu tạo mới)
   activeDebtFilter: 'active', // 'active' | 'settled' | 'all'
   assets: [], // Danh sách tài sản sở hữu & thẩm định AI
+  editingAssetId: null, // ID tài sản đang xem/chỉnh sửa chi tiết
+  latestModalAppraisal: null, // Kết quả thẩm định gần nhất trong modal
   selectedAssetIcon: '🏍️',
   geminiApiKey: ''
 };
@@ -1847,6 +1849,15 @@ function renderAssetsView() {
 
   container.innerHTML = html;
 
+  // Bấm vào từng thẻ tài sản để xem chi tiết & chỉnh sửa
+  container.querySelectorAll('.asset-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-asset-action')) return;
+      const id = card.dataset.id;
+      if (id) openEditAssetModal(id);
+    });
+  });
+
   container.querySelectorAll('.btn-asset-action.reappraise').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1864,8 +1875,70 @@ function renderAssetsView() {
   });
 }
 
+function openEditAssetModal(id) {
+  const asset = (State.assets || []).find(a => a.id === id);
+  if (!asset) return;
+
+  State.editingAssetId = asset.id;
+  State.latestModalAppraisal = null;
+  State.selectedAssetIcon = asset.icon || '📦';
+
+  const modalTitle = document.getElementById('asset-modal-title');
+  if (modalTitle) modalTitle.textContent = '✨ Chi Tiết & Chỉnh Sửa Tài Sản';
+
+  const nameInput = document.getElementById('input-asset-name');
+  const priceInput = document.getElementById('input-asset-price');
+  if (nameInput) nameInput.value = asset.name || '';
+  if (priceInput) priceInput.value = asset.price ? formatCurrency(asset.price) : '';
+
+  // Chọn chip icon tương ứng
+  document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.icon === State.selectedAssetIcon);
+  });
+
+  // Hiển thị khung thẩm định AI chi tiết
+  const aiBox = document.getElementById('asset-ai-eval-box');
+  const aiPrice = document.getElementById('asset-modal-ai-price');
+  const aiNote = document.getElementById('asset-modal-ai-note');
+  const aiTime = document.getElementById('asset-modal-ai-time');
+
+  if (aiBox) {
+    aiBox.style.display = 'block';
+    if (aiPrice) aiPrice.textContent = `${formatCurrency(asset.price || 0)} ₫`;
+    if (aiNote) aiNote.textContent = asset.note || 'Định giá tự động bởi Gemini Flash';
+    if (aiTime) {
+      const dateStr = asset.updatedAt ? formatDateDisplay(asset.updatedAt.slice(0, 10)) : 'Gần đây';
+      aiTime.textContent = `🕒 Cập nhật: ${dateStr}`;
+    }
+  }
+
+  // Nút hành động
+  const btnText = document.getElementById('btn-save-asset-text');
+  if (btnText) btnText.textContent = '💾 Cập Nhật Thay Đổi';
+
+  const deleteBtn = document.getElementById('btn-modal-delete-asset');
+  if (deleteBtn) deleteBtn.style.display = 'block';
+
+  const backdrop = document.getElementById('modal-asset-backdrop');
+  const modal = document.getElementById('modal-asset');
+  if (backdrop) {
+    backdrop.style.display = 'block';
+    requestAnimationFrame(() => backdrop.classList.add('active'));
+  }
+  if (modal) {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  }
+}
+
 function openAssetModal() {
+  State.editingAssetId = null;
+  State.latestModalAppraisal = null;
   State.selectedAssetIcon = '🏍️';
+
+  const modalTitle = document.getElementById('asset-modal-title');
+  if (modalTitle) modalTitle.textContent = '✨ Thêm Tài Sản Mới';
+
   const nameInput = document.getElementById('input-asset-name');
   const priceInput = document.getElementById('input-asset-price');
   if (nameInput) nameInput.value = '';
@@ -1875,8 +1948,14 @@ function openAssetModal() {
     chip.classList.toggle('active', chip.dataset.icon === '🏍️');
   });
 
+  const aiBox = document.getElementById('asset-ai-eval-box');
+  if (aiBox) aiBox.style.display = 'none';
+
   const btnText = document.getElementById('btn-save-asset-text');
   if (btnText) btnText.textContent = '✨ Thẩm Định Giá Bằng AI & Lưu';
+
+  const deleteBtn = document.getElementById('btn-modal-delete-asset');
+  if (deleteBtn) deleteBtn.style.display = 'none';
 
   const backdrop = document.getElementById('modal-asset-backdrop');
   const modal = document.getElementById('modal-asset');
@@ -1892,6 +1971,8 @@ function openAssetModal() {
 }
 
 function closeAssetModal() {
+  State.editingAssetId = null;
+  State.latestModalAppraisal = null;
   const backdrop = document.getElementById('modal-asset-backdrop');
   const modal = document.getElementById('modal-asset');
   if (backdrop) backdrop.classList.remove('active');
@@ -1908,19 +1989,74 @@ async function handleSaveAsset() {
   const submitBtn = document.getElementById('btn-save-asset');
   const btnText = document.getElementById('btn-save-asset-text');
 
-  const name = nameInput.value.trim();
+  const name = (nameInput?.value || '').trim();
   if (!name) {
     showToast('⚠️ Vui lòng nhập tên tài sản (vd: Wave RSX, Galaxy A05...)');
-    nameInput.focus();
+    nameInput?.focus();
     return;
   }
 
-  const manualPrice = parseFormattedNumber(priceInput.value);
+  const manualPrice = parseFormattedNumber(priceInput?.value);
 
+  // CHẾ ĐỘ CHỈNH SỬA TÀI SẢN HIỆN CÓ
+  if (State.editingAssetId) {
+    const asset = (State.assets || []).find(a => a.id === State.editingAssetId);
+    if (!asset) return;
+
+    let finalPrice = manualPrice;
+    let finalNote = asset.note;
+
+    // Nếu vừa thẩm định lại bằng AI trong modal
+    if (State.latestModalAppraisal) {
+      if (manualPrice === State.latestModalAppraisal.price || manualPrice === 0) {
+        finalPrice = State.latestModalAppraisal.price;
+        finalNote = State.latestModalAppraisal.note;
+      }
+    } else if (manualPrice > 0 && manualPrice !== asset.price) {
+      finalNote = 'Giá trị do bạn tự chỉnh sửa';
+    } else if (manualPrice === 0) {
+      // Để trống giá: tự động gọi AI thẩm định lại
+      if (submitBtn) submitBtn.disabled = true;
+      if (btnText) btnText.textContent = '⏳ AI đang thẩm định giá...';
+      try {
+        const result = await callGeminiAppraisal(name);
+        finalPrice = result.price;
+        finalNote = result.note;
+      } catch (err) {
+        showToast(`⚠️ Không thể gọi AI: ${err.message}`);
+        if (submitBtn) submitBtn.disabled = false;
+        if (btnText) btnText.textContent = '💾 Cập Nhật Thay Đổi';
+        return;
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (btnText) btnText.textContent = '💾 Cập Nhật Thay Đổi';
+      }
+    }
+
+    asset.name = name;
+    asset.icon = State.selectedAssetIcon || '📦';
+    asset.price = finalPrice;
+    asset.note = finalNote;
+    asset.updatedAt = new Date().toISOString();
+
+    State.latestModalAppraisal = null;
+    State.editingAssetId = null;
+
+    saveData();
+    closeAssetModal();
+    renderAssetsView();
+    showToast(`✅ Đã cập nhật: ${name}!`);
+    return;
+  }
+
+  // CHẾ ĐỘ THÊM MỚI TÀI SẢN
   let finalPrice = manualPrice;
   let finalNote = 'Tài sản sở hữu';
 
-  if (manualPrice > 0) {
+  if (State.latestModalAppraisal && (manualPrice === State.latestModalAppraisal.price || manualPrice === 0)) {
+    finalPrice = State.latestModalAppraisal.price;
+    finalNote = State.latestModalAppraisal.note;
+  } else if (manualPrice > 0) {
     finalPrice = manualPrice;
     finalNote = 'Giá trị do bạn tự nhập';
   } else {
@@ -1938,7 +2074,7 @@ async function handleSaveAsset() {
       showToast(`⚠️ Không thể gọi AI: ${err.message}. Bạn có thể nhập giá thủ công.`);
       if (submitBtn) submitBtn.disabled = false;
       if (btnText) btnText.textContent = '✨ Thẩm Định Giá Bằng AI & Lưu';
-      priceInput.focus();
+      priceInput?.focus();
       return;
     } finally {
       if (submitBtn) submitBtn.disabled = false;
@@ -1956,6 +2092,7 @@ async function handleSaveAsset() {
     updatedAt: new Date().toISOString()
   };
 
+  State.latestModalAppraisal = null;
   if (!Array.isArray(State.assets)) State.assets = [];
   State.assets.unshift(newAsset);
 
@@ -1963,6 +2100,50 @@ async function handleSaveAsset() {
   closeAssetModal();
   renderAssetsView();
   showToast(`✨ Đã thêm: ${name} = ${formatCurrency(finalPrice)} ₫!`);
+}
+
+async function handleModalReappraisal() {
+  const nameInput = document.getElementById('input-asset-name');
+  const priceInput = document.getElementById('input-asset-price');
+  const btn = document.getElementById('btn-reappraise-in-modal');
+  const btnText = document.getElementById('btn-reappraise-modal-text');
+  const icon = btn?.querySelector('.reappraise-icon');
+
+  const name = (nameInput?.value || '').trim();
+  if (!name) {
+    showToast('⚠️ Vui lòng nhập tên tài sản để thẩm định lại!');
+    nameInput?.focus();
+    return;
+  }
+
+  if (icon) icon.classList.add('spin-animation');
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Đang định giá...';
+  showToast(`🤖 Gemini AI đang phân tích giá cho "${name}"...`);
+
+  try {
+    const result = await callGeminiAppraisal(name);
+    State.latestModalAppraisal = result;
+
+    if (priceInput) priceInput.value = formatCurrency(result.price);
+
+    const aiPrice = document.getElementById('asset-modal-ai-price');
+    const aiNote = document.getElementById('asset-modal-ai-note');
+    const aiTime = document.getElementById('asset-modal-ai-time');
+
+    if (aiPrice) aiPrice.textContent = `${formatCurrency(result.price)} ₫`;
+    if (aiNote) aiNote.textContent = result.note;
+    if (aiTime) aiTime.textContent = '🕒 Vừa thẩm định xong';
+
+    showToast(`✨ Gemini AI đã định giá: ${formatCurrency(result.price)} ₫!`);
+  } catch (err) {
+    console.error('Lỗi thẩm định trong modal:', err);
+    showToast(`❌ Thẩm định thất bại: ${err.message}`);
+  } finally {
+    if (icon) icon.classList.remove('spin-animation');
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Thẩm định lại';
+  }
 }
 
 async function handleReappraiseAsset(id, btnEl) {
@@ -1993,11 +2174,11 @@ async function handleReappraiseAsset(id, btnEl) {
   }
 }
 
-function handleDeleteAsset(id) {
+function handleDeleteAsset(id, skipConfirm = false) {
   const asset = (State.assets || []).find(a => a.id === id);
   if (!asset) return;
 
-  if (confirm(`Bạn có chắc muốn xóa tài sản "${asset.name}"?`)) {
+  if (skipConfirm || confirm(`Bạn có chắc muốn xóa tài sản "${asset.name}"?`)) {
     State.assets = State.assets.filter(a => a.id !== id);
     saveData();
     renderAssetsView();
@@ -2500,6 +2681,22 @@ function setupEventListeners() {
   document.getElementById('modal-asset-close-btn')?.addEventListener('click', closeAssetModal);
   document.getElementById('modal-asset-backdrop')?.addEventListener('click', closeAssetModal);
   document.getElementById('btn-save-asset')?.addEventListener('click', handleSaveAsset);
+
+  // Thẩm định lại AI ngay trong modal
+  document.getElementById('btn-reappraise-in-modal')?.addEventListener('click', handleModalReappraisal);
+
+  // Xóa tài sản từ trong modal
+  document.getElementById('btn-modal-delete-asset')?.addEventListener('click', () => {
+    if (!State.editingAssetId) return;
+    const asset = (State.assets || []).find(a => a.id === State.editingAssetId);
+    if (!asset) return;
+    if (confirm(`Bạn có chắc muốn xóa tài sản "${asset.name}" không?`)) {
+      const idToDelete = State.editingAssetId;
+      State.editingAssetId = null;
+      closeAssetModal();
+      handleDeleteAsset(idToDelete, true);
+    }
+  });
 
   // Chọn icon tài sản
   document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(chip => {

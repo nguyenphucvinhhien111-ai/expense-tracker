@@ -2601,11 +2601,16 @@ body.theme-light .assets-breakdown-grid {
   padding: 14px 16px;
   gap: 12px;
   transition: var(--transition);
+  cursor: pointer;
 }
 
 .asset-card:hover {
   border-color: rgba(168, 85, 247, 0.35);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.asset-card:active {
+  transform: scale(0.98);
 }
 
 .asset-card-left {
@@ -2759,4 +2764,114 @@ body.theme-light .assets-breakdown-grid {
 
 #modal-asset .btn-submit {
   margin-bottom: 25px;
+}
+
+#modal-asset .btn-modal-delete {
+  margin-bottom: 25px;
+}
+
+/* Asset AI Appraisal Evaluation Box */
+.asset-ai-eval-box {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: var(--radius-xl);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.ai-eval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.ai-eval-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #c084fc;
+}
+
+.btn-reappraise-modal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  color: #e9d5ff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-reappraise-modal:active {
+  transform: scale(0.94);
+  background: rgba(168, 85, 247, 0.35);
+}
+
+.ai-eval-price-badge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-eval-price-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ai-eval-price-val {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #c084fc;
+}
+
+.ai-eval-note {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+  font-style: italic;
+  padding-left: 8px;
+  border-left: 3px solid #a855f7;
+}
+
+.ai-eval-footer {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+body.theme-light .asset-ai-eval-box {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%);
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+body.theme-light .ai-eval-title {
+  color: #7c3aed;
+}
+
+body.theme-light .ai-eval-price-badge {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .ai-eval-price-val {
+  color: #7c3aed;
+}
+
+body.theme-light .btn-reappraise-modal {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.3);
+  color: #6d28d9;
 }
