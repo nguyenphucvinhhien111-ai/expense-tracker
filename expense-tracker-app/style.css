@@ -327,14 +327,18 @@ html, body {
   font-family: var(--font-family);
   background-color: #030712;
   color: var(--text-primary);
-  overflow-x: hidden;
+  overflow: hidden;
+  position: fixed;
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Desktop Presentation Viewport */
 .app-viewport {
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -352,7 +356,8 @@ html, body {
 .mobile-container {
   width: 100%;
   max-width: 440px;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   background-color: var(--bg-app);
   display: flex;
   flex-direction: column;
@@ -1587,11 +1592,13 @@ body.theme-dark .nav-item.active {
   backdrop-filter: blur(4px);
   z-index: 40;
   opacity: 0;
+  display: none;
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
 
 .bottom-sheet-backdrop.active {
+  display: block;
   opacity: 1;
   pointer-events: auto;
 }
@@ -1610,13 +1617,14 @@ body.theme-dark .nav-item.active {
   z-index: 50;
   transform: translateY(100%);
   transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  display: flex;
+  display: none;
   flex-direction: column;
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom, 20px);
 }
 
 .bottom-sheet.active {
+  display: flex;
   transform: translateY(0);
 }
 

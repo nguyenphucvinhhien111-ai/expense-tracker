@@ -584,8 +584,8 @@ function renderTransactionList() {
     const q = State.searchQuery.trim().toLowerCase();
     filtered = filtered.filter(tx => {
       return (tx.note && tx.note.toLowerCase().includes(q)) ||
-             (tx.category && tx.category.toLowerCase().includes(q)) ||
-             (String(tx.amount).includes(q));
+        (tx.category && tx.category.toLowerCase().includes(q)) ||
+        (String(tx.amount).includes(q));
     });
   }
 
@@ -702,7 +702,7 @@ function renderTransactionList() {
       const sign = isIncome ? '+' : '-';
       const amountClass = isIncome ? 'income' : 'expense';
       const amountDisplay = State.isBalanceHidden ? `${sign} •••••• ₫` : `${sign} ${formatCurrency(tx.amount)} ₫`;
-      
+
       let specialBadge = '';
       if (isDebt) {
         specialBadge = `<span style="font-size:0.68rem; background:rgba(99,102,241,0.12); color:#6366f1; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:4px;">Cộng số dư ví</span>`;
@@ -760,10 +760,10 @@ function renderTransactionList() {
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function renderStatsView() {
@@ -872,8 +872,8 @@ function renderStatsView() {
   categoriesArray.forEach((item, index) => {
     const pct = targetTotal > 0 ? Math.round((item.amount / targetTotal) * 100) : 0;
     const barColor = colors[index % colors.length];
-    const catAmountDisplay = State.isBalanceHidden 
-      ? (isIncome ? '+•••••• ₫' : '•••••• ₫') 
+    const catAmountDisplay = State.isBalanceHidden
+      ? (isIncome ? '+•••••• ₫' : '•••••• ₫')
       : (isIncome ? `+${formatCurrency(item.amount)} ₫` : `${formatCurrency(item.amount)} ₫`);
 
     catHtml += `
@@ -934,7 +934,7 @@ function deleteTransaction(id) {
 function openTransactionModal(defaultType = 'expense') {
   State.editingTxId = null;
   State.modalType = defaultType;
-  
+
   const modal = document.getElementById('modal-tx');
   const backdrop = document.getElementById('modal-backdrop');
   const sheetTitle = document.getElementById('sheet-title');
@@ -957,8 +957,14 @@ function openTransactionModal(defaultType = 'expense') {
   renderModalCategories();
 
   // Mở modal
-  backdrop.classList.add('active');
-  modal.classList.add('active');
+  if (backdrop) {
+    backdrop.style.display = 'block';
+    requestAnimationFrame(() => backdrop.classList.add('active'));
+  }
+  if (modal) {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  }
 
   // Focus vào ô nhập số tiền sau khi trượt lên
   setTimeout(() => {
@@ -1010,8 +1016,14 @@ function openEditTransactionModal(id) {
     });
   }
 
-  backdrop.classList.add('active');
-  modal.classList.add('active');
+  if (backdrop) {
+    backdrop.style.display = 'block';
+    requestAnimationFrame(() => backdrop.classList.add('active'));
+  }
+  if (modal) {
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+  }
 }
 
 function closeTransactionModal() {
@@ -1022,6 +1034,10 @@ function closeTransactionModal() {
   if (btnDeleteInModal) btnDeleteInModal.style.display = 'none';
   if (modal) modal.classList.remove('active');
   if (backdrop) backdrop.classList.remove('active');
+  setTimeout(() => {
+    if (modal && !modal.classList.contains('active')) modal.style.display = 'none';
+    if (backdrop && !backdrop.classList.contains('active')) backdrop.style.display = 'none';
+  }, 320);
 }
 
 function updateModalTypeToggle(type) {
@@ -1056,7 +1072,7 @@ function updateModalTypeToggle(type) {
 function renderModalCategories() {
   const grid = document.getElementById('categories-grid');
   const list = CATEGORIES[State.modalType] || [];
-  
+
   if (!State.selectedCategory || !list.some(c => c.id === State.selectedCategory.id)) {
     State.selectedCategory = list[0] || null;
   }
@@ -1363,9 +1379,11 @@ function openCreateDebtModal(personName = '') {
   }
 
   backdrop.style.display = 'block';
-  modal.style.display = 'block';
-  backdrop.classList.add('active');
-  modal.classList.add('active');
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    backdrop.classList.add('active');
+    modal.classList.add('active');
+  });
 
   setTimeout(() => {
     if (!personName) personInput.focus();
@@ -1376,14 +1394,12 @@ function openCreateDebtModal(personName = '') {
 function closeCreateDebtModal() {
   const modal = document.getElementById('modal-debt-create');
   const backdrop = document.getElementById('modal-debt-create-backdrop');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
-  if (backdrop) {
-    backdrop.classList.remove('active');
-    backdrop.style.display = 'none';
-  }
+  if (modal) modal.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+  setTimeout(() => {
+    if (modal && !modal.classList.contains('active')) modal.style.display = 'none';
+    if (backdrop && !backdrop.classList.contains('active')) backdrop.style.display = 'none';
+  }, 320);
 }
 
 function handleSaveDebtRecord() {
@@ -1472,9 +1488,11 @@ function openRepayDebtModal(debtId) {
   }
 
   backdrop.style.display = 'block';
-  modal.style.display = 'block';
-  backdrop.classList.add('active');
-  modal.classList.add('active');
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    backdrop.classList.add('active');
+    modal.classList.add('active');
+  });
 
   setTimeout(() => {
     amountInput.focus();
@@ -1485,14 +1503,12 @@ function closeRepayDebtModal() {
   currentRepayDebtId = null;
   const modal = document.getElementById('modal-debt-repay');
   const backdrop = document.getElementById('modal-debt-repay-backdrop');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
-  if (backdrop) {
-    backdrop.classList.remove('active');
-    backdrop.style.display = 'none';
-  }
+  if (modal) modal.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+  setTimeout(() => {
+    if (modal && !modal.classList.contains('active')) modal.style.display = 'none';
+    if (backdrop && !backdrop.classList.contains('active')) backdrop.style.display = 'none';
+  }, 320);
 }
 
 function handleSaveRepayRecord() {
@@ -1604,23 +1620,23 @@ function openDebtDetailModal(debtId) {
   }
 
   backdrop.style.display = 'block';
-  modal.style.display = 'block';
-  backdrop.classList.add('active');
-  modal.classList.add('active');
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    backdrop.classList.add('active');
+    modal.classList.add('active');
+  });
 }
 
 function closeDebtDetailModal() {
   currentDetailDebtId = null;
   const modal = document.getElementById('modal-debt-detail');
   const backdrop = document.getElementById('modal-debt-detail-backdrop');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
-  if (backdrop) {
-    backdrop.classList.remove('active');
-    backdrop.style.display = 'none';
-  }
+  if (modal) modal.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+  setTimeout(() => {
+    if (modal && !modal.classList.contains('active')) modal.style.display = 'none';
+    if (backdrop && !backdrop.classList.contains('active')) backdrop.style.display = 'none';
+  }, 320);
 }
 
 function deleteDebtRecord(debtId, recId) {
@@ -1657,6 +1673,23 @@ function deleteWholeDebt(debtId) {
 function switchView(targetView) {
   if (!targetView) return;
 
+  // Đóng mọi modal nếu đang mở
+  closeTransactionModal();
+  closeAssetModal();
+  closeCreateDebtModal();
+  closeRepayDebtModal();
+  closeDebtDetailModal();
+
+  // Reset cuộn trang về đầu
+  const mainEl = document.querySelector('.app-main');
+  if (mainEl) mainEl.scrollTop = 0;
+
+  // Ẩn/Hiện thanh chọn tháng theo ngữ cảnh (chỉ dùng cho Thu Chi và Thống kê)
+  const monthBar = document.querySelector('.month-selector-bar');
+  if (monthBar) {
+    monthBar.style.display = (targetView === 'view-home' || targetView === 'view-stats') ? 'flex' : 'none';
+  }
+
   document.querySelectorAll('.app-view').forEach(view => view.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
 
@@ -1686,7 +1719,7 @@ async function callGeminiAppraisal(assetName) {
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
 
-  const prompt = `Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (năm 2026).
+  const prompt = `Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (năm hiện tại) và hãy cập nhật giá thật chính xác, đặc biệt là giá vàng (phải đúng theo thị trường từng ngày).
 Hãy thẩm định giá trị thị trường hiện tại hợp lý bằng tiền VNĐ cho: "${assetName}".
 Yêu cầu bắt buộc: Chỉ trả về duy nhất 1 JSON object không kèm markdown với 2 trường:
 {
@@ -1849,11 +1882,11 @@ function openAssetModal() {
   const modal = document.getElementById('modal-asset');
   if (backdrop) {
     backdrop.style.display = 'block';
-    backdrop.classList.add('active');
+    requestAnimationFrame(() => backdrop.classList.add('active'));
   }
   if (modal) {
     modal.style.display = 'flex';
-    modal.classList.add('active');
+    requestAnimationFrame(() => modal.classList.add('active'));
   }
   setTimeout(() => nameInput?.focus(), 200);
 }
@@ -1861,14 +1894,12 @@ function openAssetModal() {
 function closeAssetModal() {
   const backdrop = document.getElementById('modal-asset-backdrop');
   const modal = document.getElementById('modal-asset');
-  if (backdrop) {
-    backdrop.classList.remove('active');
-    setTimeout(() => { backdrop.style.display = 'none'; }, 250);
-  }
-  if (modal) {
-    modal.classList.remove('active');
-    setTimeout(() => { modal.style.display = 'none'; }, 250);
-  }
+  if (backdrop) backdrop.classList.remove('active');
+  if (modal) modal.classList.remove('active');
+  setTimeout(() => {
+    if (backdrop && !backdrop.classList.contains('active')) backdrop.style.display = 'none';
+    if (modal && !modal.classList.contains('active')) modal.style.display = 'none';
+  }, 320);
 }
 
 async function handleSaveAsset() {
@@ -1988,9 +2019,15 @@ function setupEventListeners() {
     });
   });
 
-  // Nút Thêm ở giữa (+ FAB)
+  // Nút Thêm ở giữa (+ FAB): mở modal theo ngữ cảnh tab hiện tại
   document.getElementById('btn-fab-add').addEventListener('click', () => {
-    openTransactionModal('expense');
+    if (State.activeView === 'view-assets') {
+      openAssetModal();
+    } else if (State.activeView === 'view-debts') {
+      openCreateDebtModal();
+    } else {
+      openTransactionModal('expense');
+    }
   });
 
   // Nút nhanh: + Nhận Tiền
@@ -2184,7 +2221,7 @@ function setupEventListeners() {
   // Đổi giao diện Sáng / Tối
   const themeToggleBtn = document.getElementById('btn-theme-toggle');
   const themeIcon = document.getElementById('theme-icon');
-  
+
   // Khôi phục theme đã lưu
   const savedTheme = localStorage.getItem(STORAGE_KEY_THEME) || 'dark';
   if (savedTheme === 'light') {
@@ -2671,7 +2708,7 @@ function handleImportJson(e) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = function(evt) {
+  reader.onload = function (evt) {
     try {
       const data = JSON.parse(evt.target.result);
       applyRestoredData(data);
