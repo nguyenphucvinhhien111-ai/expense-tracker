@@ -1760,9 +1760,8 @@ async function postToGemini(url, prompt, useSearch = true) {
 }
 
 function getGeminiEndpoint(apiKey) {
-  // Dùng gemini-2.5-flash hoặc gemini-2.5-flash-lite / gemini-3.5-flash-lite
-  // Ưu tiên gemini-2.5-flash (nếu có) hoặc gemini-2.5-flash-lite
-  const model = 'gemini-2.5-flash';
+  // Model đang hoạt động chuẩn và có sẵn trên API: gemini-3.5-flash-lite
+  const model = 'gemini-3.5-flash-lite';
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
