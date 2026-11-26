@@ -1847,16 +1847,28 @@ function openAssetModal() {
 
   const backdrop = document.getElementById('modal-asset-backdrop');
   const modal = document.getElementById('modal-asset');
-  if (backdrop) backdrop.style.display = 'block';
-  if (modal) modal.style.display = 'block';
+  if (backdrop) {
+    backdrop.style.display = 'block';
+    backdrop.classList.add('active');
+  }
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
   setTimeout(() => nameInput?.focus(), 200);
 }
 
 function closeAssetModal() {
   const backdrop = document.getElementById('modal-asset-backdrop');
   const modal = document.getElementById('modal-asset');
-  if (backdrop) backdrop.style.display = 'none';
-  if (modal) modal.style.display = 'none';
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    setTimeout(() => { backdrop.style.display = 'none'; }, 250);
+  }
+  if (modal) {
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 250);
+  }
 }
 
 async function handleSaveAsset() {
