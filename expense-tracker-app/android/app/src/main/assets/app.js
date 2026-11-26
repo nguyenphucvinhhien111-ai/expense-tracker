@@ -1777,13 +1777,14 @@ async function callGeminiAppraisal(assetName) {
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
-Hãy dùng Google Search để tra cứu giá thị trường thực tế mới nhất tại Việt Nam hôm nay cho: "${assetName}".
+Hãy tra cứu (hoặc thẩm định) giá thị trường thực tế mới nhất tại Việt Nam cho: "${assetName}".
 
-Quy tắc:
-- Nếu là vàng (9999, nhẫn trơn, SJC, PNJ, DOJI): tra cứu giá vàng hôm nay. Nếu không ghi khối lượng, ước tính theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
-- Nếu là xe máy, điện thoại, đồ cũ: tra cứu giá bán lại tham khảo hiện nay tại Việt Nam.
+Quy tắc thẩm định bắt buộc:
+- Thời điểm hiện tại là năm 2026: Giá vàng nhẫn 9999 / vàng trang sức 9999 tại Việt Nam đang giao dịch quanh mức 12.500.000 - 13.500.000 VNĐ / 1 chỉ (tương đương 125 - 135 triệu/lượng). Tuyệt đối không dùng mức giá cũ các năm 2023-2024 (7-8 triệu/chỉ).
+- Nếu là vàng (9999, nhẫn trơn, SJC, PNJ, DOJI): Nếu không ghi khối lượng, ước tính chuẩn theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
+- Nếu là xe máy, điện thoại, đồ cũ: tra cứu/ước tính giá bán lại tham khảo hiện nay tại Việt Nam theo độ hao mòn.
 - Chỉ trả về duy nhất 1 JSON object hợp lệ:
-{"price": 13000000, "note": "Giá tham khảo thị trường hôm nay"}
+{"price": 13000000, "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)"}
 Trong đó "price" là số nguyên VNĐ, "note" ngắn gọn dưới 35 từ.`;
 
   const response = await postToGemini(url, prompt, true);
