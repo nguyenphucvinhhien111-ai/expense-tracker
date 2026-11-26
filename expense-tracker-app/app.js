@@ -1765,6 +1765,32 @@ function getGeminiEndpoint(apiKey) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
+// Lấy giá vàng thế giới & quy đổi giá vàng nhẫn 9999 thực tế theo ngày (Real-time Market Data tự động theo ngày)
+async function fetchRealtimeGoldReference() {
+  try {
+    const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.json');
+    if (!res.ok) return null;
+    const data = await res.json();
+    const xauVnd = data?.xau?.vnd;
+    if (!xauVnd || isNaN(xauVnd)) return null;
+
+    // 1 troy oz = 31.1034768g, 1 chỉ = 3.75g
+    const spotPerChi = Math.round((xauVnd / 31.1034768) * 3.75);
+    // Chênh lệch giá vàng nhẫn 9999 tại VN (thuế, phí gia công, premium thực tế ~18%)
+    const vnEstimatedChi = Math.round(spotPerChi * 1.18);
+    const vnEstimatedLuong = vnEstimatedChi * 10;
+    return {
+      date: data.date || '',
+      spotPerChi,
+      vnEstimatedChi,
+      vnEstimatedLuong
+    };
+  } catch (e) {
+    console.warn('Không tải được giá vàng thị trường realtime:', e.message);
+    return null;
+  }
+}
+
 async function callGeminiAppraisal(assetName) {
   const apiKey = State.geminiApiKey || localStorage.getItem(STORAGE_KEY_GEMINI_KEY) || '';
   if (!apiKey) {
@@ -1775,14 +1801,25 @@ async function callGeminiAppraisal(assetName) {
   const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
+  // Kiểm tra nếu tài sản liên quan đến vàng, tự động lấy giá vàng thị trường hôm nay từ sàn quy đổi
+  const isGoldAsset = /vàng|gold|9999|sjc|pnj|doji|chỉ|lượng|cây/i.test(assetName);
+  let goldContext = '';
+  if (isGoldAsset) {
+    const goldData = await fetchRealtimeGoldReference();
+    if (goldData) {
+      goldContext = `\n[DỮ LIỆU THỊ TRƯỜNG THỰC TẾ HÔM NAY]:
+- Giá vàng giao ngay quy đổi sàn thị trường hôm nay: khoảng ${goldData.vnEstimatedChi.toLocaleString('vi-VN')} VNĐ/chỉ (tương đương ~${goldData.vnEstimatedLuong.toLocaleString('vi-VN')} VNĐ/lượng).
+- HÃY DÙNG CON SỐ THỊ TRƯỜNG NÀY ĐỂ TÍNH TOÁN VÀ ĐỊNH GIÁ CHUẨN XÁC THEO NGÀY HÔM NAY.`;
+    }
+  }
+
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
-Hãy tra cứu (hoặc thẩm định) giá thị trường thực tế mới nhất tại Việt Nam cho: "${assetName}".
+Hãy tra cứu (hoặc thẩm định) giá thị trường thực tế mới nhất tại Việt Nam cho: "${assetName}".${goldContext}
 
-Quy tắc thẩm định bắt buộc:
-- Thời điểm hiện tại là năm 2026: Giá vàng nhẫn 9999 / vàng trang sức 9999 tại Việt Nam đang giao dịch quanh mức 12.500.000 - 13.500.000 VNĐ / 1 chỉ (tương đương 125 - 135 triệu/lượng). Tuyệt đối không dùng mức giá cũ các năm 2023-2024 (7-8 triệu/chỉ).
-- Nếu là vàng (9999, nhẫn trơn, SJC, PNJ, DOJI): Nếu không ghi khối lượng, ước tính chuẩn theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
-- Nếu là xe máy, điện thoại, đồ cũ: tra cứu/ước tính giá bán lại tham khảo hiện nay tại Việt Nam theo độ hao mòn.
+Quy tắc thẩm định:
+- Nếu là vàng: Hãy dùng dữ liệu thị trường thực tế ở trên hoặc tra cứu giá mới nhất hôm nay. Nếu người dùng không ghi rõ khối lượng, ước tính chuẩn theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
+- Nếu là xe máy, điện thoại, đồ cũ: tra cứu/ước tính giá bán lại tham khảo hiện nay tại Việt Nam theo độ hao mòn và thị trường đồ cũ.
 - Chỉ trả về duy nhất 1 JSON object hợp lệ:
 {"price": 13000000, "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)"}
 Trong đó "price" là số nguyên VNĐ, "note" ngắn gọn dưới 35 từ.`;
@@ -1827,10 +1864,21 @@ async function callGeminiChatAppraisal(asset, userMessage) {
   const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
+  // Kiểm tra nếu tài sản liên quan đến vàng, bổ sung giá thị trường realtime từ sàn
+  const isGoldAsset = /vàng|gold|9999|sjc|pnj|doji|chỉ|lượng|cây/i.test(asset.name + ' ' + userMessage);
+  let goldContext = '';
+  if (isGoldAsset) {
+    const goldData = await fetchRealtimeGoldReference();
+    if (goldData) {
+      goldContext = `\n[DỮ LIỆU THỊ TRƯỜNG THỰC TẾ HÔM NAY]:
+- Giá vàng giao ngay quy đổi sàn thị trường hôm nay: khoảng ${goldData.vnEstimatedChi.toLocaleString('vi-VN')} VNĐ/chỉ (tương đương ~${goldData.vnEstimatedLuong.toLocaleString('vi-VN')} VNĐ/lượng).`;
+    }
+  }
+
   const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
-Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.
+Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.${goldContext}
 HÃY DÙNG GOOGLE SEARCH để tra cứu giá thị trường thực tế mới nhất nếu cần thiết.
 
 Tài sản đang thẩm định: "${asset.name}".
