@@ -1765,6 +1765,76 @@ Lưu ý "price" phải là số nguyên (VNĐ), "note" là giải thích ngắn 
   return { price, note };
 }
 
+async function callGeminiChatAppraisal(asset, userMessage) {
+  const apiKey = State.geminiApiKey || localStorage.getItem(STORAGE_KEY_GEMINI_KEY) || '';
+  if (!apiKey) {
+    showToast('⚠️ Vui lòng vào Cài đặt và nhập Google Gemini API Key trước!');
+    throw new Error('Chưa cấu hình Google Gemini API Key');
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+
+  const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
+
+  const prompt = `Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (năm hiện tại) và là trợ lý thông minh lắng nghe người dùng.
+Tài sản đang thẩm định: "${asset.name}".
+Giá ước tính trước đó: ${asset.price || 0} VNĐ.
+Ghi chú trước đó: "${asset.note || ''}".
+
+Lịch sử trao đổi trước đó:
+${historyText || '(Chưa có)'}
+
+Người dùng vừa nhắn thêm thông tin chi tiết / giải thích sự tình:
+"${userMessage}"
+
+Nhiệm vụ của bạn:
+1. Đọc kỹ thông tin người dùng cung cấp (ví dụ: khối lượng cụ thể như 1.3 chỉ/lượng vàng, giá mua thực tế mới mua, tình trạng, hóa đơn, số km đã chạy, linh kiện...).
+2. Cập nhật lại giá thị trường ("price") chính xác và hợp lý nhất bằng tiền VNĐ (phải là số nguyên). Nếu người dùng nói giá mua thực tế gần đây (ví dụ: vàng 9999 mới mua 12tr là 1.3 chỉ), hãy công nhận và cập nhật giá phản ánh đúng giá trị thực tế theo thông tin người dùng đưa ra.
+3. Viết câu phản hồi ("reply") thân thiện, thông minh, ngắn gọn (dưới 50 từ), giải thích vì sao bạn cập nhật giá như vậy cho người dùng hiểu.
+4. Tóm tắt ghi chú ngắn gọn ("note") dưới 25 từ cho thẻ tài sản.
+
+Yêu cầu bắt buộc: Trả về duy nhất 1 JSON object:
+{
+  "price": 12000000,
+  "reply": "Dạ em đã hiểu rõ! Với 12 triệu mới mua (tương đương khoảng 1.3 - 1.4 chỉ hoặc tính cả tiền công), em đã cập nhật lại giá tài sản thành 12.000.000 ₫ cho mình rồi ạ.",
+  "note": "1.3 chỉ vàng 9999 mới mua 12tr (đã cập nhật theo thực tế)"
+}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const errMsg = errData.error?.message || `Lỗi HTTP ${response.status}`;
+    throw new Error(errMsg);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error('AI không trả về kết quả');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (e) {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    else throw new Error('Không phân tích được kết quả JSON từ AI');
+  }
+
+  const price = Math.round(Number(parsed.price) || 0);
+  const reply = String(parsed.reply || 'Đã cập nhật giá tài sản theo thông tin của bạn.').trim();
+  const note = String(parsed.note || 'Cập nhật theo thực tế').trim();
+  return { price, reply, note };
+}
+
 function renderAssetsView() {
   const cashBalance = getOverallCashBalance();
   const assetsValue = (State.assets || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
@@ -1912,6 +1982,10 @@ function openEditAssetModal(id) {
     }
   }
 
+  // Khởi tạo và render hội thoại hỏi đáp AI
+  asset.chatHistory = Array.isArray(asset.chatHistory) ? asset.chatHistory : [];
+  renderAssetChatMessages(asset);
+
   // Nút hành động
   const btnText = document.getElementById('btn-save-asset-text');
   if (btnText) btnText.textContent = '💾 Cập Nhật Thay Đổi';
@@ -1931,6 +2005,135 @@ function openEditAssetModal(id) {
   }
 }
 
+function renderAssetChatMessages(asset) {
+  const container = document.getElementById('asset-ai-chat-messages');
+  if (!container) return;
+
+  const history = Array.isArray(asset?.chatHistory) ? asset.chatHistory : [];
+
+  if (history.length === 0) {
+    container.innerHTML = `
+      <div class="ai-chat-bubble model">
+        <span>🤖 <strong>Gemini:</strong> Mức giá hiện tại là <strong>${formatCurrency(asset?.price || 0)} ₫</strong>. Nếu giá chưa sát thực tế (do khác khối lượng chỉ/lượng, độ mới, có hóa đơn hay không...), bạn cứ nhắn giải thích rõ sự tình ở ô bên dưới nhé!</span>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="ai-chat-bubble model">
+      <span>🤖 <strong>Gemini:</strong> Mức giá hiện tại: <strong>${formatCurrency(asset?.price || 0)} ₫</strong>. Có thêm chi tiết nào bạn cứ nhắn để mình tính lại nhé!</span>
+    </div>
+  `;
+
+  history.forEach(msg => {
+    const isUser = msg.role === 'user';
+    const bubbleClass = isUser ? 'user' : 'model';
+    const prefix = isUser ? '👤 ' : '🤖 ';
+    html += `
+      <div class="ai-chat-bubble ${bubbleClass}">
+        <span><strong>${prefix}</strong>${escapeHtml(msg.text)}</span>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+
+async function handleSendAssetChatMessage(customText = null) {
+  const inputEl = document.getElementById('input-ai-chat');
+  const sendBtn = document.getElementById('btn-ai-chat-send');
+  const iconEl = document.getElementById('btn-ai-chat-send-icon');
+  const chatMessagesEl = document.getElementById('asset-ai-chat-messages');
+
+  const text = (typeof customText === 'string' ? customText : (inputEl?.value || '')).trim();
+  if (!text) {
+    inputEl?.focus();
+    return;
+  }
+
+  // Lấy tài sản đang mở
+  let currentAsset = null;
+  if (State.editingAssetId) {
+    currentAsset = (State.assets || []).find(a => a.id === State.editingAssetId);
+  }
+  if (!currentAsset) {
+    const nameInput = document.getElementById('input-asset-name');
+    const priceInput = document.getElementById('input-asset-price');
+    currentAsset = {
+      name: nameInput?.value?.trim() || 'Tài sản',
+      price: parseFormattedNumber(priceInput?.value) || 0,
+      note: 'Đang thảo luận với AI',
+      chatHistory: []
+    };
+  }
+
+  if (!Array.isArray(currentAsset.chatHistory)) currentAsset.chatHistory = [];
+
+  // Thêm tin nhắn của user vào hội thoại
+  currentAsset.chatHistory.push({ role: 'user', text: text, time: new Date().toISOString() });
+  renderAssetChatMessages(currentAsset);
+
+  if (inputEl) inputEl.value = '';
+
+  // Thêm bubble loading
+  const loadingBubble = document.createElement('div');
+  loadingBubble.className = 'ai-chat-bubble model loading';
+  loadingBubble.id = 'ai-chat-loading-bubble';
+  loadingBubble.innerHTML = '<span>🤖 Gemini đang phân tích sự tình và tính toán lại giá...</span>';
+  chatMessagesEl?.appendChild(loadingBubble);
+  if (chatMessagesEl) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  if (sendBtn) sendBtn.disabled = true;
+  if (iconEl) iconEl.textContent = '⏳';
+
+  try {
+    const result = await callGeminiChatAppraisal(currentAsset, text);
+
+    // Xóa bubble loading
+    loadingBubble.remove();
+
+    // Thêm phản hồi của Gemini
+    currentAsset.chatHistory.push({ role: 'model', text: result.reply, time: new Date().toISOString() });
+    renderAssetChatMessages(currentAsset);
+
+    // Cập nhật giá & ghi chú ngay tức thì trên form
+    currentAsset.price = result.price;
+    currentAsset.note = result.note;
+    currentAsset.updatedAt = new Date().toISOString();
+
+    State.latestModalAppraisal = { price: result.price, note: result.note };
+
+    const priceInput = document.getElementById('input-asset-price');
+    if (priceInput) priceInput.value = formatCurrency(result.price);
+
+    const aiPrice = document.getElementById('asset-modal-ai-price');
+    const aiNote = document.getElementById('asset-modal-ai-note');
+    const aiTime = document.getElementById('asset-modal-ai-time');
+
+    if (aiPrice) aiPrice.textContent = `${formatCurrency(result.price)} ₫`;
+    if (aiNote) aiNote.textContent = result.note;
+    if (aiTime) aiTime.textContent = '🕒 Vừa cập nhật theo bạn';
+
+    // Lưu dữ liệu nếu đang edit tài sản có sẵn
+    if (State.editingAssetId) {
+      saveData();
+      renderAssetsView();
+    }
+
+    showToast(`✨ Gemini đã cập nhật giá: ${formatCurrency(result.price)} ₫!`);
+  } catch (err) {
+    loadingBubble.remove();
+    console.error('Lỗi khi chat với Gemini:', err);
+    showToast(`❌ Không thể trao đổi với AI: ${err.message}`);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    if (iconEl) iconEl.textContent = '➤';
+    inputEl?.focus();
+  }
+}
+
 function openAssetModal() {
   State.editingAssetId = null;
   State.latestModalAppraisal = null;
@@ -1943,6 +2146,11 @@ function openAssetModal() {
   const priceInput = document.getElementById('input-asset-price');
   if (nameInput) nameInput.value = '';
   if (priceInput) priceInput.value = '';
+
+  const chatMessagesEl = document.getElementById('asset-ai-chat-messages');
+  if (chatMessagesEl) chatMessagesEl.innerHTML = '';
+  const chatInput = document.getElementById('input-ai-chat');
+  if (chatInput) chatInput.value = '';
 
   document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(chip => {
     chip.classList.toggle('active', chip.dataset.icon === '🏍️');
@@ -2684,6 +2892,27 @@ function setupEventListeners() {
 
   // Thẩm định lại AI ngay trong modal
   document.getElementById('btn-reappraise-in-modal')?.addEventListener('click', handleModalReappraisal);
+
+  // Trò chuyện / giải thích sự tình cho Gemini cập nhật giá
+  document.getElementById('btn-ai-chat-send')?.addEventListener('click', () => handleSendAssetChatMessage());
+  document.getElementById('input-ai-chat')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSendAssetChatMessage();
+    }
+  });
+
+  // Gợi ý nhanh trong phần hỏi đáp AI
+  document.querySelectorAll('.chat-hint-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const hint = chip.dataset.hint;
+      if (hint) {
+        const input = document.getElementById('input-ai-chat');
+        if (input) input.value = hint;
+        handleSendAssetChatMessage(hint);
+      }
+    });
+  });
 
   // Xóa tài sản từ trong modal
   document.getElementById('btn-modal-delete-asset')?.addEventListener('click', () => {
