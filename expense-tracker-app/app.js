@@ -95,6 +95,18 @@ function getDayOfWeekName(dateStr) {
   return days[dateObj.getDay()] || '';
 }
 
+function getCurrentRealtimeContext() {
+  const now = new Date();
+  const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const dayName = days[now.getDay()];
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${dayName}, ngày ${day}/${month}/${year} (${hours}:${minutes})`;
+}
+
 function showToast(message) {
   const toast = document.getElementById('toast');
   toast.textContent = message;
@@ -1720,9 +1732,13 @@ async function callGeminiAppraisal(assetName) {
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+  const realtimeNow = getCurrentRealtimeContext();
 
-  const prompt = `Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (năm hiện tại) và hãy cập nhật giá thật chính xác, đặc biệt là giá vàng (phải đúng theo thị trường từng ngày).
+  const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
+Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
+Hãy cập nhật giá thật chính xác theo thị trường thực tế của ngày hôm nay, đặc biệt là giá vàng và đồ công nghệ/xe máy.
 Hãy thẩm định giá trị thị trường hiện tại hợp lý bằng tiền VNĐ cho: "${assetName}".
+Lưu ý quan trọng: Nếu tài sản là vàng hoặc kim loại quý mà người dùng không ghi rõ khối lượng (ví dụ chỉ ghi "vàng 9999"), hãy ước tính theo 1 chỉ vàng nhẫn 9999 tiêu chuẩn (theo thời giá ngày ${realtimeNow}) và ghi rõ trong "note" là "Ước tính theo 1 chỉ vàng 9999 (bấm vào thẻ để giải thích thêm khối lượng cho AI)".
 Yêu cầu bắt buộc: Chỉ trả về duy nhất 1 JSON object không kèm markdown với 2 trường:
 {
   "price": 14000000,
@@ -1772,10 +1788,12 @@ async function callGeminiChatAppraisal(asset, userMessage) {
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+  const realtimeNow = getCurrentRealtimeContext();
 
   const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
 
-  const prompt = `Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (năm hiện tại) và là trợ lý thông minh lắng nghe người dùng.
+  const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
+Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.
 Tài sản đang thẩm định: "${asset.name}".
 Giá ước tính trước đó: ${asset.price || 0} VNĐ.
 Ghi chú trước đó: "${asset.note || ''}".
@@ -1788,7 +1806,7 @@ Người dùng vừa nhắn thêm thông tin chi tiết / giải thích sự tì
 
 Nhiệm vụ của bạn:
 1. Đọc kỹ thông tin người dùng cung cấp (ví dụ: khối lượng cụ thể như 1.3 chỉ/lượng vàng, giá mua thực tế mới mua, tình trạng, hóa đơn, số km đã chạy, linh kiện...).
-2. Cập nhật lại giá thị trường ("price") chính xác và hợp lý nhất bằng tiền VNĐ (phải là số nguyên). Nếu người dùng nói giá mua thực tế gần đây (ví dụ: vàng 9999 mới mua 12tr là 1.3 chỉ), hãy công nhận và cập nhật giá phản ánh đúng giá trị thực tế theo thông tin người dùng đưa ra.
+2. Cập nhật lại giá thị trường ("price") chính xác và hợp lý nhất bằng tiền VNĐ tính đến thời điểm hiện tại ${realtimeNow} (phải là số nguyên). Nếu người dùng nói giá mua thực tế gần đây (ví dụ: vàng 9999 mới mua 12tr là 1.3 chỉ), hãy công nhận và cập nhật giá phản ánh đúng giá trị thực tế theo thông tin người dùng đưa ra.
 3. Viết câu phản hồi ("reply") thân thiện, thông minh, ngắn gọn (dưới 50 từ), giải thích vì sao bạn cập nhật giá như vậy cho người dùng hiểu.
 4. Tóm tắt ghi chú ngắn gọn ("note") dưới 25 từ cho thẻ tài sản.
 
