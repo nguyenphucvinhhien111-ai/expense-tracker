@@ -63,9 +63,15 @@
             <div class="balance-card-glow"></div>
             <div class="balance-top">
               <span class="balance-label">Tổng số dư khả dụng</span>
-              <button class="balance-eye-btn" id="btn-toggle-balance-privacy" title="Ẩn/Hiện số tiền">
-                <span id="balance-eye-icon">👁️</span>
-              </button>
+              <div class="balance-top-actions">
+                <button type="button" class="balance-ai-btn" id="btn-open-net-worth" title="Tài sản ròng & Thẩm định AI">
+                  <span class="ai-sparkle-icon">✨</span>
+                  <span class="ai-btn-text">Tài sản ròng</span>
+                </button>
+                <button type="button" class="balance-eye-btn" id="btn-toggle-balance-privacy" title="Ẩn/Hiện số tiền">
+                  <span id="balance-eye-icon">👁️</span>
+                </button>
+              </div>
             </div>
             <div class="balance-amount-wrapper">
               <h2 class="balance-amount" id="total-balance-display">0 <span class="currency-symbol">₫</span></h2>
@@ -187,9 +193,19 @@
               </div>
             </div>
 
-            <!-- Spending Breakdown by Category -->
+            <!-- Spending & Income Breakdown by Category -->
             <div class="breakdown-section">
-              <h4 class="breakdown-title">Chi tiết theo danh mục</h4>
+              <div class="breakdown-header-wrap">
+                <h4 class="breakdown-title">Chi tiết theo danh mục</h4>
+                <div class="stats-type-toggle">
+                  <button type="button" class="stats-type-btn expense-toggle active" id="btn-stats-expense">
+                    <span class="type-dot red"></span> Chi tiêu
+                  </button>
+                  <button type="button" class="stats-type-btn income-toggle" id="btn-stats-income">
+                    <span class="type-dot green"></span> Thu nhập
+                  </button>
+                </div>
+              </div>
               <div id="stats-category-list" class="stats-category-list">
                 <!-- Rendered via JS -->
               </div>
@@ -229,8 +245,80 @@
           </div>
         </section>
 
+        <!-- VIEW: NET WORTH & ASSETS (TÀI SẢN RÒNG & THẨM ĐỊNH AI) -->
+        <section id="view-assets" class="app-view">
+          <!-- BACK NAVIGATION & TOP ACTIONS -->
+          <div class="assets-top-bar">
+            <button type="button" class="btn-assets-back" id="btn-back-from-assets" title="Quay lại Thu Chi">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <span>Thu Chi</span>
+            </button>
+            <h3 class="assets-view-title">💎 Tài Sản Ròng</h3>
+            <button type="button" class="btn-create-asset-top" id="btn-open-add-asset-top">
+              <span>+ Thêm</span>
+            </button>
+          </div>
+
+          <!-- NET WORTH OVERVIEW CARD -->
+          <div class="assets-overview-card">
+            <div class="assets-card-glow"></div>
+            <div class="assets-summary-top">
+              <span class="assets-summary-label">TỔNG TÀI SẢN RÒNG HIỆN TẠI</span>
+              <span class="assets-ai-badge">✨ Gemini AI Flash</span>
+            </div>
+            <h2 class="assets-networth-val" id="networth-total-display">0 ₫</h2>
+            <div class="assets-breakdown-grid">
+              <div class="assets-breakdown-item">
+                <span class="assets-mini-label">💵 Tiền mặt / Ví</span>
+                <strong class="assets-mini-val" id="networth-cash-display">0 ₫</strong>
+              </div>
+              <div class="assets-breakdown-item">
+                <span class="assets-mini-label">💎 Tài sản sở hữu</span>
+                <strong class="assets-mini-val purple-text" id="networth-assets-display">0 ₫</strong>
+              </div>
+              <div class="assets-breakdown-item">
+                <span class="assets-mini-label">🤝 Đang cho vay</span>
+                <strong class="assets-mini-val blue-text" id="networth-debts-display">0 ₫</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- ASSETS LIST HEADER -->
+          <div class="assets-list-header">
+            <h4 class="assets-section-title">Danh sách tài sản sở hữu (<span id="assets-count-label">0</span>)</h4>
+            <button type="button" class="btn-add-asset-pill" id="btn-open-add-asset">
+              <span>+ Thêm tài sản</span>
+            </button>
+          </div>
+
+          <!-- ASSETS LIST CONTAINER -->
+          <div class="assets-list-container" id="assets-list-container">
+            <!-- Rendered via JS -->
+          </div>
+        </section>
+
         <!-- VIEW 3: SETTINGS & BACKUP (CÀI ĐẶT & SAO LƯU) -->
         <section id="view-settings" class="app-view">
+          <!-- GEMINI AI API SETTINGS -->
+          <div class="settings-group" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(99, 102, 241, 0.08) 100%); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: var(--radius-xl); padding: 18px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="margin: 0; font-size: 1.02rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                🤖 Google Gemini AI Key
+              </h3>
+              <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: 700; background: rgba(16, 185, 129, 0.2); color: #10b981;">
+                Miễn phí
+              </span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.4;">
+              Dùng để thẩm định giá tài sản đồ cũ (Wave RSX, điện thoại, laptop...).
+            </p>
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="input-gemini-key" class="form-input" placeholder="Nhập Google Gemini API Key" style="font-size: 0.82rem; font-family: monospace;" />
+              <button type="button" id="btn-save-gemini-key" class="dialog-btn primary" style="white-space: nowrap; padding: 8px 14px; font-size: 0.82rem;">
+                Lưu Key
+              </button>
+            </div>
+          </div>
           <!-- CLOUD SYNC & GOOGLE ACCOUNT CARD -->
           <div class="settings-group" id="group-cloud-sync" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: var(--radius-xl); padding: 18px; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -774,6 +862,58 @@
             </button>
             <button type="button" class="btn-modal-delete" id="btn-detail-delete-debt" style="flex: 1; background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-lg); font-weight: 700; font-size: 0.8rem; cursor: pointer;">
               Xóa hồ sơ
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: ADD / EDIT ASSET (THẨM ĐỊNH TÀI SẢN AI) -->
+      <div class="bottom-sheet-backdrop" id="modal-asset-backdrop" style="display: none;"></div>
+      <div class="bottom-sheet" id="modal-asset" style="display: none;">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title" id="asset-modal-title">✨ Thêm Tài Sản Mới</h3>
+          <button class="sheet-close-btn" id="modal-asset-close-btn" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <!-- TÊN TÀI SẢN -->
+          <div class="form-group">
+            <label class="form-label">Tên tài sản sở hữu <span class="required">*</span></label>
+            <input type="text" id="input-asset-name" class="form-input" placeholder="Ví dụ: Xe Wave RSX 2021, Samsung Galaxy A05, Vàng SJC..." autocomplete="off" />
+            <small style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; display: block;">
+              💡 Ghi rõ tên hoặc năm/phiên bản để AI định giá chính xác nhất.
+            </small>
+          </div>
+
+          <!-- CHỌN BIỂU TƯỢNG (ICON) -->
+          <div class="form-group">
+            <label class="form-label">Chọn biểu tượng</label>
+            <div class="asset-icon-grid" id="asset-icon-picker">
+              <button type="button" class="asset-icon-chip active" data-icon="🏍️">🏍️ Xe máy</button>
+              <button type="button" class="asset-icon-chip" data-icon="📱">📱 Điện thoại</button>
+              <button type="button" class="asset-icon-chip" data-icon="💻">💻 Laptop</button>
+              <button type="button" class="asset-icon-chip" data-icon="🚗">🚗 Ô tô</button>
+              <button type="button" class="asset-icon-chip" data-icon="🪙">🪙 Vàng/Bạc</button>
+              <button type="button" class="asset-icon-chip" data-icon="🏠">🏠 Nhà đất</button>
+              <button type="button" class="asset-icon-chip" data-icon="⌚">⌚ Đồng hồ</button>
+              <button type="button" class="asset-icon-chip" data-icon="📺">📺 Điện máy</button>
+              <button type="button" class="asset-icon-chip" data-icon="📦">📦 Khác</button>
+            </div>
+          </div>
+
+          <!-- TÙY CHỌN: NHẬP GIÁ THỦ CÔNG NẾU MUỐN -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="margin: 0;">Giá trị ước tính (VNĐ)</label>
+              <span style="font-size: 0.72rem; color: #a855f7; font-weight: 600;">✨ Tự động bởi Gemini Flash</span>
+            </div>
+            <input type="text" id="input-asset-price" class="form-input" placeholder="Để trống để AI tự định giá" inputmode="numeric" />
+          </div>
+
+          <!-- SUBMIT BUTTON -->
+          <div class="modal-actions">
+            <button type="button" class="btn-submit" id="btn-save-asset" style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);">
+              <span id="btn-save-asset-text">✨ Thẩm Định Giá Bằng AI & Lưu</span>
             </button>
           </div>
         </div>

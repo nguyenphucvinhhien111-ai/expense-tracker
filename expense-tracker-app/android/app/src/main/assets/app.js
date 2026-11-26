@@ -39,10 +39,14 @@ const State = {
   searchQuery: '',
   isBalanceHidden: true, // MẶC ĐỊNH KHI VÀO APP LÀ ẨN TIỀN
   modalType: 'expense', // 'expense' | 'income'
+  statsBreakdownType: 'expense', // 'expense' | 'income'
   selectedCategory: null,
   activeView: 'view-home',
   editingTxId: null, // ID giao dịch đang sửa (null nếu tạo mới)
-  activeDebtFilter: 'active' // 'active' | 'settled' | 'all'
+  activeDebtFilter: 'active', // 'active' | 'settled' | 'all'
+  assets: [], // Danh sách tài sản sở hữu & thẩm định AI
+  selectedAssetIcon: '🏍️',
+  geminiApiKey: ''
 };
 
 // =========================================================
@@ -104,6 +108,8 @@ function showToast(message) {
 
 const STORAGE_KEY_TX = 'so_thu_chi_transactions_v1';
 const STORAGE_KEY_DEBTS = 'so_thu_chi_debts_v1';
+const STORAGE_KEY_ASSETS = 'so_thu_chi_assets_v1';
+const STORAGE_KEY_GEMINI_KEY = 'so_thu_chi_gemini_key_v1';
 const STORAGE_KEY_INIT = 'so_thu_chi_initial_balance_v1';
 const STORAGE_KEY_THEME = 'so_thu_chi_theme_v1';
 
@@ -111,7 +117,13 @@ function loadData() {
   try {
     const rawTx = localStorage.getItem(STORAGE_KEY_TX);
     const rawDebts = localStorage.getItem(STORAGE_KEY_DEBTS);
+    const rawAssets = localStorage.getItem(STORAGE_KEY_ASSETS);
     const rawInit = localStorage.getItem(STORAGE_KEY_INIT);
+    const savedGeminiKey = localStorage.getItem(STORAGE_KEY_GEMINI_KEY);
+
+    if (savedGeminiKey) {
+      State.geminiApiKey = savedGeminiKey;
+    }
 
     if (rawTx !== null) {
       State.transactions = JSON.parse(rawTx);
@@ -127,6 +139,16 @@ function loadData() {
       }
     } else {
       State.debts = [];
+    }
+
+    if (rawAssets !== null) {
+      try {
+        State.assets = JSON.parse(rawAssets);
+      } catch (e) {
+        State.assets = [];
+      }
+    } else {
+      State.assets = [];
     }
 
     if (rawInit !== null) {
@@ -148,6 +170,7 @@ function loadData() {
     console.error('Lỗi khi đọc dữ liệu:', err);
     State.transactions = [];
     State.debts = [];
+    State.assets = [];
     State.initialBalance = 0;
   }
 }
@@ -163,6 +186,10 @@ function saveDataLocally() {
   try {
     localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(State.transactions));
     localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify(State.debts || []));
+    localStorage.setItem(STORAGE_KEY_ASSETS, JSON.stringify(State.assets || []));
+    if (State.geminiApiKey) {
+      localStorage.setItem(STORAGE_KEY_GEMINI_KEY, State.geminiApiKey);
+    }
     localStorage.setItem(STORAGE_KEY_INIT, String(State.initialBalance));
   } catch (err) {
     console.error('Lỗi khi lưu dữ liệu:', err);
@@ -180,6 +207,7 @@ function renderApp() {
   renderTransactionList();
   renderStatsView();
   renderDebtsView();
+  renderAssetsView();
 }
 
 function renderDateHeader() {
@@ -227,8 +255,7 @@ function getTotalDebtRemaining() {
   return totalRemaining;
 }
 
-function renderBalanceCard() {
-  // Tính tổng số dư tất cả các tháng (Số dư ban đầu + Tổng tất cả Thu - Tổng tất cả Chi - Tiền đang cho vay chưa thu hồi)
+function getOverallCashBalance() {
   let totalAllIncome = 0;
   let totalAllExpense = 0;
 
@@ -236,14 +263,18 @@ function renderBalanceCard() {
     if (isDebtRecoveryTx(tx) || isLoanGivenTx(tx)) return;
     if (tx.type === 'income') {
       totalAllIncome += tx.amount;
-    }
-    else if (tx.type === 'expense') {
+    } else if (tx.type === 'expense') {
       totalAllExpense += tx.amount;
     }
   });
 
   const totalDebtOut = getTotalDebtRemaining();
-  const overallBalance = State.initialBalance + totalAllIncome - totalAllExpense - totalDebtOut;
+  return State.initialBalance + totalAllIncome - totalAllExpense - totalDebtOut;
+}
+
+function renderBalanceCard() {
+  // Tính tổng số dư tất cả các tháng (Số dư ban đầu + Tổng tất cả Thu - Tổng tất cả Chi - Tiền đang cho vay chưa thu hồi)
+  const overallBalance = getOverallCashBalance();
 
   // Tính thu chi riêng của tháng hiện tại được chọn (DOANH THU & CHI TIÊU THÁNG TIÊU DÙNG)
   let monthIncome = 0;
@@ -763,11 +794,20 @@ function renderStatsView() {
   let totalIncome = 0;
   let totalExpense = 0;
   const expenseByCat = {};
+  const incomeByCat = {};
 
   rangeTransactions.forEach(tx => {
     if (tx.type === 'income') {
       if (!isDebtRecoveryTx(tx)) {
         totalIncome += tx.amount;
+        if (!incomeByCat[tx.category]) {
+          incomeByCat[tx.category] = {
+            name: tx.category,
+            icon: tx.categoryIcon || '💵',
+            amount: 0
+          };
+        }
+        incomeByCat[tx.category].amount += tx.amount;
       }
     } else {
       if (!isLoanGivenTx(tx)) {
@@ -796,25 +836,45 @@ function renderStatsView() {
   savingEl.textContent = State.isBalanceHidden ? '••%' : `${savingRate}%`;
   savingEl.style.color = savingRate >= 0 ? 'var(--income-green)' : 'var(--expense-red)';
 
-  // Danh sách danh mục chi
+  // Cập nhật trạng thái nút chuyển Chi tiêu / Thu nhập
+  const isIncome = State.statsBreakdownType === 'income';
+  const btnStatsExpense = document.getElementById('btn-stats-expense');
+  const btnStatsIncome = document.getElementById('btn-stats-income');
+  if (btnStatsExpense && btnStatsIncome) {
+    if (isIncome) {
+      btnStatsExpense.classList.remove('active');
+      btnStatsIncome.classList.add('active');
+    } else {
+      btnStatsExpense.classList.add('active');
+      btnStatsIncome.classList.remove('active');
+    }
+  }
+
+  // Danh sách danh mục (theo Chi tiêu hoặc Thu nhập đang chọn)
   const catListEl = document.getElementById('stats-category-list');
-  const categoriesArray = Object.values(expenseByCat);
+  const targetByCat = isIncome ? incomeByCat : expenseByCat;
+  const targetTotal = isIncome ? totalIncome : totalExpense;
+  const categoriesArray = Object.values(targetByCat);
 
   if (categoriesArray.length === 0) {
-    catListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 20px;">Đợt này bạn chưa có khoản chi nào.</p>`;
+    catListEl.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 20px;">${isIncome ? 'Đợt này bạn chưa có khoản thu nào.' : 'Đợt này bạn chưa có khoản chi nào.'}</p>`;
     return;
   }
 
-  // Sắp xếp chi nhiều nhất lên đầu
+  // Sắp xếp số tiền nhiều nhất lên đầu
   categoriesArray.sort((a, b) => b.amount - a.amount);
 
-  const colors = ['#f43f5e', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f97316', '#64748b'];
+  const expenseColors = ['#f43f5e', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#f97316', '#64748b'];
+  const incomeColors = ['#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#f59e0b', '#14b8a6', '#64748b'];
+  const colors = isIncome ? incomeColors : expenseColors;
 
   let catHtml = '';
   categoriesArray.forEach((item, index) => {
-    const pct = totalExpense > 0 ? Math.round((item.amount / totalExpense) * 100) : 0;
+    const pct = targetTotal > 0 ? Math.round((item.amount / targetTotal) * 100) : 0;
     const barColor = colors[index % colors.length];
-    const catAmountDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(item.amount)} ₫`;
+    const catAmountDisplay = State.isBalanceHidden 
+      ? (isIncome ? '+•••••• ₫' : '•••••• ₫') 
+      : (isIncome ? `+${formatCurrency(item.amount)} ₫` : `${formatCurrency(item.amount)} ₫`);
 
     catHtml += `
       <div class="stat-cat-row">
@@ -824,7 +884,7 @@ function renderStatsView() {
             <span>${item.name}</span>
           </span>
           <div class="stat-cat-values">
-            <span class="stat-cat-amount">${catAmountDisplay}</span>
+            <span class="stat-cat-amount ${isIncome ? 'green-text' : ''}">${catAmountDisplay}</span>
             <span class="stat-cat-pct">(${pct}%)</span>
           </div>
         </div>
@@ -1591,6 +1651,318 @@ function deleteWholeDebt(debtId) {
 }
 
 // =========================================================
+// VIEW: QUẢN LÝ TÀI SẢN RÒNG & THẨM ĐỊNH AI
+// =========================================================
+
+function switchView(targetView) {
+  if (!targetView) return;
+
+  document.querySelectorAll('.app-view').forEach(view => view.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+
+  const viewEl = document.getElementById(targetView);
+  if (viewEl) viewEl.classList.add('active');
+  State.activeView = targetView;
+
+  const navBtn = document.querySelector(`.nav-item[data-view="${targetView}"]`);
+  if (navBtn) navBtn.classList.add('active');
+
+  if (targetView === 'view-home') {
+    renderApp();
+  } else if (targetView === 'view-stats') {
+    renderStatsView();
+  } else if (targetView === 'view-debts') {
+    renderDebtsView();
+  } else if (targetView === 'view-assets') {
+    renderAssetsView();
+  }
+}
+
+async function callGeminiAppraisal(assetName) {
+  const apiKey = State.geminiApiKey || localStorage.getItem(STORAGE_KEY_GEMINI_KEY) || '';
+  if (!apiKey) {
+    showToast('⚠️ Vui lòng vào Cài đặt và nhập Google Gemini API Key trước!');
+    throw new Error('Chưa cấu hình Google Gemini API Key');
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+
+  const prompt = `Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (năm 2026).
+Hãy thẩm định giá trị thị trường hiện tại hợp lý bằng tiền VNĐ cho: "${assetName}".
+Yêu cầu bắt buộc: Chỉ trả về duy nhất 1 JSON object không kèm markdown với 2 trường:
+{
+  "price": 14000000,
+  "note": "Giá tham khảo hàng cũ chạy tốt khoảng 12-16 triệu"
+}
+Lưu ý "price" phải là số nguyên (VNĐ), "note" là giải thích ngắn gọn dưới 35 từ.`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const errMsg = errData.error?.message || `Lỗi HTTP ${response.status}`;
+    throw new Error(errMsg);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error('AI không trả về kết quả');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (e) {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    else throw new Error('Không phân tích được kết quả JSON từ AI');
+  }
+
+  const price = Math.round(Number(parsed.price) || 0);
+  const note = String(parsed.note || 'Định giá bởi Gemini AI').trim();
+  return { price, note };
+}
+
+function renderAssetsView() {
+  const cashBalance = getOverallCashBalance();
+  const assetsValue = (State.assets || []).reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+  const debtsLent = typeof getTotalDebtRemaining === 'function' ? getTotalDebtRemaining() : 0;
+  const totalNetWorth = cashBalance + assetsValue + debtsLent;
+
+  // Cập nhật DOM số tiền
+  const networthTotalEl = document.getElementById('networth-total-display');
+  const networthCashEl = document.getElementById('networth-cash-display');
+  const networthAssetsEl = document.getElementById('networth-assets-display');
+  const networthDebtsEl = document.getElementById('networth-debts-display');
+  const countLabelEl = document.getElementById('assets-count-label');
+
+  if (networthTotalEl) {
+    networthTotalEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(totalNetWorth)} ₫`;
+  }
+  if (networthCashEl) {
+    networthCashEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(cashBalance)} ₫`;
+  }
+  if (networthAssetsEl) {
+    networthAssetsEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(assetsValue)} ₫`;
+  }
+  if (networthDebtsEl) {
+    networthDebtsEl.textContent = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(debtsLent)} ₫`;
+  }
+  if (countLabelEl) {
+    countLabelEl.textContent = String((State.assets || []).length);
+  }
+
+  // Danh sách tài sản
+  const container = document.getElementById('assets-list-container');
+  if (!container) return;
+
+  if (!State.assets || State.assets.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px 16px; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-xl);">
+        <div style="font-size: 2.5rem; margin-bottom: 10px;">🏍️ 📱 💻</div>
+        <h4 style="margin: 0 0 6px 0; color: var(--text-primary); font-size: 0.98rem; font-weight: 700;">Chưa có tài sản nào</h4>
+        <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">
+          Nhập tài sản của bạn (Wave RSX, Galaxy A05, laptop...) để Gemini AI tự động thẩm định giá thị trường và tính tài sản ròng!
+        </p>
+        <button type="button" class="btn-submit" id="btn-empty-add-asset" style="max-width: 220px; margin: 0 auto; padding: 10px 16px; font-size: 0.85rem; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);">
+          <span>+ Thêm Tài Sản Đầu Tiên</span>
+        </button>
+      </div>
+    `;
+    document.getElementById('btn-empty-add-asset')?.addEventListener('click', () => openAssetModal());
+    return;
+  }
+
+  let html = '';
+  State.assets.forEach(asset => {
+    const priceDisplay = State.isBalanceHidden ? '•••••• ₫' : `${formatCurrency(asset.price)} ₫`;
+    const dateDisplay = asset.updatedAt ? formatDateDisplay(asset.updatedAt.slice(0, 10)) : 'Gần đây';
+
+    html += `
+      <div class="asset-card" data-id="${asset.id}">
+        <div class="asset-card-left">
+          <div class="asset-icon-box">
+            <span>${asset.icon || '📦'}</span>
+          </div>
+          <div class="asset-info">
+            <span class="asset-name">${escapeHtml(asset.name)}</span>
+            <span class="asset-note">${escapeHtml(asset.note || 'Định giá tự động bởi Gemini Flash')}</span>
+            <span class="asset-time">🕒 Cập nhật: ${dateDisplay}</span>
+          </div>
+        </div>
+        <div class="asset-card-right">
+          <span class="asset-price">${priceDisplay}</span>
+          <div class="asset-actions">
+            <button type="button" class="btn-asset-action reappraise" data-id="${asset.id}" title="Thẩm định lại giá với AI">
+              <span class="reappraise-icon">🔄</span>
+            </button>
+            <button type="button" class="btn-asset-action delete" data-id="${asset.id}" title="Xóa tài sản">
+              🗑️
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.btn-asset-action.reappraise').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      handleReappraiseAsset(id, btn);
+    });
+  });
+
+  container.querySelectorAll('.btn-asset-action.delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      handleDeleteAsset(id);
+    });
+  });
+}
+
+function openAssetModal() {
+  State.selectedAssetIcon = '🏍️';
+  const nameInput = document.getElementById('input-asset-name');
+  const priceInput = document.getElementById('input-asset-price');
+  if (nameInput) nameInput.value = '';
+  if (priceInput) priceInput.value = '';
+
+  document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.icon === '🏍️');
+  });
+
+  const btnText = document.getElementById('btn-save-asset-text');
+  if (btnText) btnText.textContent = '✨ Thẩm Định Giá Bằng AI & Lưu';
+
+  const backdrop = document.getElementById('modal-asset-backdrop');
+  const modal = document.getElementById('modal-asset');
+  if (backdrop) backdrop.style.display = 'block';
+  if (modal) modal.style.display = 'block';
+  setTimeout(() => nameInput?.focus(), 200);
+}
+
+function closeAssetModal() {
+  const backdrop = document.getElementById('modal-asset-backdrop');
+  const modal = document.getElementById('modal-asset');
+  if (backdrop) backdrop.style.display = 'none';
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleSaveAsset() {
+  const nameInput = document.getElementById('input-asset-name');
+  const priceInput = document.getElementById('input-asset-price');
+  const submitBtn = document.getElementById('btn-save-asset');
+  const btnText = document.getElementById('btn-save-asset-text');
+
+  const name = nameInput.value.trim();
+  if (!name) {
+    showToast('⚠️ Vui lòng nhập tên tài sản (vd: Wave RSX, Galaxy A05...)');
+    nameInput.focus();
+    return;
+  }
+
+  const manualPrice = parseFormattedNumber(priceInput.value);
+
+  let finalPrice = manualPrice;
+  let finalNote = 'Tài sản sở hữu';
+
+  if (manualPrice > 0) {
+    finalPrice = manualPrice;
+    finalNote = 'Giá trị do bạn tự nhập';
+  } else {
+    // Gọi Gemini AI thẩm định giá
+    if (submitBtn) submitBtn.disabled = true;
+    if (btnText) btnText.textContent = '⏳ AI đang thẩm định giá...';
+    showToast(`🤖 Gemini Flash đang phân tích giá cho "${name}"...`);
+
+    try {
+      const result = await callGeminiAppraisal(name);
+      finalPrice = result.price;
+      finalNote = result.note;
+    } catch (err) {
+      console.error('Lỗi khi gọi AI:', err);
+      showToast(`⚠️ Không thể gọi AI: ${err.message}. Bạn có thể nhập giá thủ công.`);
+      if (submitBtn) submitBtn.disabled = false;
+      if (btnText) btnText.textContent = '✨ Thẩm Định Giá Bằng AI & Lưu';
+      priceInput.focus();
+      return;
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+      if (btnText) btnText.textContent = '✨ Thẩm Định Giá Bằng AI & Lưu';
+    }
+  }
+
+  const newAsset = {
+    id: 'asset_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    name: name,
+    icon: State.selectedAssetIcon || '📦',
+    price: finalPrice,
+    note: finalNote,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!Array.isArray(State.assets)) State.assets = [];
+  State.assets.unshift(newAsset);
+
+  saveData();
+  closeAssetModal();
+  renderAssetsView();
+  showToast(`✨ Đã thêm: ${name} = ${formatCurrency(finalPrice)} ₫!`);
+}
+
+async function handleReappraiseAsset(id, btnEl) {
+  const asset = (State.assets || []).find(a => a.id === id);
+  if (!asset) return;
+
+  const iconEl = btnEl?.querySelector('.reappraise-icon');
+  if (iconEl) iconEl.classList.add('spin-animation');
+  if (btnEl) btnEl.disabled = true;
+
+  showToast(`🤖 Gemini đang thẩm định lại giá cho "${asset.name}"...`);
+
+  try {
+    const { price, note } = await callGeminiAppraisal(asset.name);
+    asset.price = price;
+    asset.note = note;
+    asset.updatedAt = new Date().toISOString();
+
+    saveData();
+    renderAssetsView();
+    showToast(`✨ Đã cập nhật giá mới: ${asset.name} = ${formatCurrency(price)} ₫!`);
+  } catch (err) {
+    console.error('Lỗi thẩm định lại giá:', err);
+    showToast(`❌ Thẩm định thất bại: ${err.message}`);
+  } finally {
+    if (iconEl) iconEl.classList.remove('spin-animation');
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+function handleDeleteAsset(id) {
+  const asset = (State.assets || []).find(a => a.id === id);
+  if (!asset) return;
+
+  if (confirm(`Bạn có chắc muốn xóa tài sản "${asset.name}"?`)) {
+    State.assets = State.assets.filter(a => a.id !== id);
+    saveData();
+    renderAssetsView();
+    showToast(`🗑️ Đã xóa tài sản "${asset.name}"`);
+  }
+}
+
+// =========================================================
 // THIẾT LẬP SỰ KIỆN TƯƠNG TÁC
 // =========================================================
 
@@ -1600,19 +1972,7 @@ function setupEventListeners() {
     btn.addEventListener('click', () => {
       const targetView = btn.dataset.view;
       if (!targetView) return;
-
-      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      document.querySelectorAll('.app-view').forEach(view => view.classList.remove('active'));
-      document.getElementById(targetView).classList.add('active');
-      State.activeView = targetView;
-
-      if (targetView === 'view-stats') {
-        renderStatsView();
-      } else if (targetView === 'view-debts') {
-        renderDebtsView();
-      }
+      switchView(targetView);
     });
   });
 
@@ -1642,6 +2002,22 @@ function setupEventListeners() {
   document.getElementById('btn-type-income').addEventListener('click', () => {
     updateModalTypeToggle('income');
   });
+
+  // Chuyển tab Chi tiêu / Thu nhập trong Thống kê
+  const btnStatsExpense = document.getElementById('btn-stats-expense');
+  const btnStatsIncome = document.getElementById('btn-stats-income');
+  if (btnStatsExpense) {
+    btnStatsExpense.addEventListener('click', () => {
+      State.statsBreakdownType = 'expense';
+      renderStatsView();
+    });
+  }
+  if (btnStatsIncome) {
+    btnStatsIncome.addEventListener('click', () => {
+      State.statsBreakdownType = 'income';
+      renderStatsView();
+    });
+  }
 
   // Lưu giao dịch
   document.getElementById('btn-save-tx').addEventListener('click', handleSaveTransaction);
@@ -1782,12 +2158,15 @@ function setupEventListeners() {
     renderTransactionList();
     if (State.activeView === 'view-stats') {
       renderStatsView();
+    } else if (State.activeView === 'view-assets') {
+      renderAssetsView();
     }
     showToast(State.isBalanceHidden ? '🙈 Đã ẩn thông tin tiền' : '👁️ Đã hiển thị số tiền');
   };
 
   document.getElementById('btn-toggle-balance-privacy')?.addEventListener('click', toggleBalancePrivacy);
   document.getElementById('total-balance-display')?.addEventListener('click', toggleBalancePrivacy);
+  document.getElementById('networth-total-display')?.addEventListener('click', toggleBalancePrivacy);
   document.querySelector('.balance-amount-wrapper')?.addEventListener('click', toggleBalancePrivacy);
 
   // Đổi giao diện Sáng / Tối
@@ -2058,6 +2437,56 @@ function setupEventListeners() {
     }
   });
 
+  // TÀI SẢN RÒNG & THẨM ĐỊNH GIÁ AI
+  document.getElementById('btn-open-net-worth')?.addEventListener('click', () => {
+    switchView('view-assets');
+  });
+
+  document.getElementById('btn-back-from-assets')?.addEventListener('click', () => {
+    switchView('view-home');
+  });
+
+  document.getElementById('btn-open-add-asset')?.addEventListener('click', () => openAssetModal());
+  document.getElementById('btn-open-add-asset-top')?.addEventListener('click', () => openAssetModal());
+  document.getElementById('modal-asset-close-btn')?.addEventListener('click', closeAssetModal);
+  document.getElementById('modal-asset-backdrop')?.addEventListener('click', closeAssetModal);
+  document.getElementById('btn-save-asset')?.addEventListener('click', handleSaveAsset);
+
+  // Chọn icon tài sản
+  document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#asset-icon-picker .asset-icon-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      State.selectedAssetIcon = chip.dataset.icon;
+    });
+  });
+
+  // Tự động định dạng ô nhập giá tài sản
+  const assetPriceInput = document.getElementById('input-asset-price');
+  if (assetPriceInput) {
+    assetPriceInput.addEventListener('input', (e) => {
+      const raw = parseFormattedNumber(e.target.value);
+      if (raw === 0) e.target.value = '';
+      else e.target.value = formatCurrency(raw);
+    });
+  }
+
+  // Cấu hình Gemini API Key trong Cài đặt
+  const geminiKeyInput = document.getElementById('input-gemini-key');
+  if (geminiKeyInput) {
+    geminiKeyInput.value = State.geminiApiKey || '';
+  }
+  document.getElementById('btn-save-gemini-key')?.addEventListener('click', () => {
+    const val = (document.getElementById('input-gemini-key')?.value || '').trim();
+    if (!val) {
+      showToast('⚠️ Vui lòng nhập API Key hợp lệ');
+      return;
+    }
+    State.geminiApiKey = val;
+    saveDataLocally();
+    showToast('🔑 Đã lưu Google Gemini API Key thành công!');
+  });
+
   // Cài đặt PWA
   setupPwaInstall();
 }
@@ -2091,7 +2520,8 @@ function exportBackupJson() {
     exportedAt: new Date().toISOString(),
     initialBalance: State.initialBalance,
     transactions: State.transactions,
-    debts: State.debts || []
+    debts: State.debts || [],
+    assets: State.assets || []
   };
 
   const jsonStr = JSON.stringify(backupData, null, 2);
@@ -2212,6 +2642,9 @@ function applyRestoredData(data) {
   }
   State.transactions = data.transactions.map(normalizeTransaction);
   State.debts = Array.isArray(data.debts) ? data.debts : [];
+  if (Array.isArray(data.assets)) {
+    State.assets = data.assets;
+  }
   if (typeof data.initialBalance === 'number' || !isNaN(Number(data.initialBalance))) {
     State.initialBalance = Number(data.initialBalance) || 0;
   }
@@ -2400,6 +2833,7 @@ async function syncToCloud() {
       initialBalance: State.initialBalance,
       transactions: State.transactions,
       debts: State.debts || [],
+      assets: State.assets || [],
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       appVersion: '1.0.0'
     }, { merge: true });
@@ -2432,6 +2866,9 @@ async function syncFromCloud(user) {
           // Máy chưa có dữ liệu, nạp luôn từ đám mây (hoàn toàn tự động, im lặng khi mở app)
           State.transactions = data.transactions.map(normalizeTransaction);
           State.debts = Array.isArray(data.debts) ? data.debts : [];
+          if (Array.isArray(data.assets)) {
+            State.assets = data.assets;
+          }
           if (typeof data.initialBalance === 'number') {
             State.initialBalance = data.initialBalance;
           }
@@ -2514,6 +2951,9 @@ function executeCloudRestore() {
   const data = pendingCloudData;
   State.transactions = (data.transactions || []).map(normalizeTransaction);
   State.debts = Array.isArray(data.debts) ? data.debts : [];
+  if (Array.isArray(data.assets)) {
+    State.assets = data.assets;
+  }
   if (typeof data.initialBalance === 'number' || !isNaN(Number(data.initialBalance))) {
     State.initialBalance = Number(data.initialBalance) || 0;
   }
