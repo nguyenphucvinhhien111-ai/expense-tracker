@@ -1765,30 +1765,85 @@ function getGeminiEndpoint(apiKey) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
-// Lấy giá vàng thế giới & quy đổi giá vàng nhẫn 9999 thực tế theo ngày (Real-time Market Data tự động theo ngày)
-async function fetchRealtimeGoldReference() {
-  try {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.json');
-    if (!res.ok) return null;
-    const data = await res.json();
-    const xauVnd = data?.xau?.vnd;
-    if (!xauVnd || isNaN(xauVnd)) return null;
+// =========================================================
+// REAL-TIME MARKET DATA PROVIDER (Vàng, Ngoại tệ & Crypto)
+// =========================================================
 
-    // 1 troy oz = 31.1034768g, 1 chỉ = 3.75g
-    const spotPerChi = Math.round((xauVnd / 31.1034768) * 3.75);
-    // Chênh lệch giá vàng nhẫn 9999 tại VN (thuế, phí gia công, premium thực tế ~18%)
-    const vnEstimatedChi = Math.round(spotPerChi * 1.18);
-    const vnEstimatedLuong = vnEstimatedChi * 10;
-    return {
-      date: data.date || '',
-      spotPerChi,
-      vnEstimatedChi,
-      vnEstimatedLuong
-    };
+// Lấy dữ liệu thị trường thực tế (Vàng, Ngoại tệ, Crypto) theo thời gian thực từ sàn thế giới quy đổi VNĐ
+async function fetchRealtimeMarketReference(text) {
+  const query = (text || '').toLowerCase();
+  const contextLines = [];
+
+  try {
+    // 1. Kiểm tra VÀNG (XAU)
+    if (/vàng|gold|9999|sjc|pnj|doji|chỉ|lượng|cây/i.test(query)) {
+      const resGold = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/xau.json');
+      if (resGold.ok) {
+        const dGold = await resGold.json();
+        const xauVnd = dGold?.xau?.vnd;
+        if (xauVnd && !isNaN(xauVnd)) {
+          const spotChi = Math.round((xauVnd / 31.1034768) * 3.75);
+          const vnEstimatedChi = Math.round(spotChi * 1.18);
+          const vnEstimatedLuong = vnEstimatedChi * 10;
+          contextLines.push(`- Giá vàng giao ngay quy đổi sàn thị trường hôm nay: khoảng ${vnEstimatedChi.toLocaleString('vi-VN')} VNĐ/chỉ (~${vnEstimatedLuong.toLocaleString('vi-VN')} VNĐ/lượng). Nếu người dùng không nói rõ khối lượng, hãy ước tính theo 1 chỉ.`);
+        }
+      }
+    }
+
+    // 2. Kiểm tra CRYPTO (Bitcoin, Ethereum, Solana, USDT...)
+    const cryptoMap = [
+      { key: 'btc', pattern: /btc|bitcoin/i, name: 'Bitcoin (BTC)' },
+      { key: 'eth', pattern: /eth|ethereum/i, name: 'Ethereum (ETH)' },
+      { key: 'sol', pattern: /sol|solana/i, name: 'Solana (SOL)' },
+      { key: 'usdt', pattern: /usdt|tether/i, name: 'Tether (USDT)' },
+      { key: 'bnb', pattern: /bnb|binance/i, name: 'Binance Coin (BNB)' }
+    ];
+
+    for (const c of cryptoMap) {
+      if (c.pattern.test(query)) {
+        const res = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${c.key}.json`);
+        if (res.ok) {
+          const d = await res.json();
+          const rate = d?.[c.key]?.vnd;
+          if (rate && !isNaN(rate)) {
+            contextLines.push(`- Tỷ giá ${c.name} thị trường hôm nay: 1 ${c.key.toUpperCase()} = ${Math.round(rate).toLocaleString('vi-VN')} VNĐ.`);
+          }
+        }
+      }
+    }
+
+    // 3. Kiểm tra NGOẠI TỆ (USD, EUR, JPY, GBP, AUD, CAD, SGD, CNY, KRW...)
+    const fiatMap = [
+      { key: 'usd', pattern: /usd|đô|dollar|\$/i, name: 'Đô la Mỹ (USD)' },
+      { key: 'eur', pattern: /eur|euro|ơ-rô|€/i, name: 'Euro (EUR)' },
+      { key: 'jpy', pattern: /jpy|yên|yen|man|sen|¥/i, name: 'Yên Nhật (JPY)' },
+      { key: 'gbp', pattern: /gbp|bảng anh|£/i, name: 'Bảng Anh (GBP)' },
+      { key: 'aud', pattern: /aud|đô úc/i, name: 'Đô la Úc (AUD)' },
+      { key: 'cad', pattern: /cad|đô can/i, name: 'Đô la Canada (CAD)' },
+      { key: 'sgd', pattern: /sgd|đô sing/i, name: 'Đô Singapore (SGD)' },
+      { key: 'cny', pattern: /cny|tệ|nhân dân tệ/i, name: 'Nhân dân tệ (CNY)' },
+      { key: 'krw', pattern: /krw|won|won hàn/i, name: 'Won Hàn Quốc (KRW)' },
+      { key: 'thb', pattern: /thb|baht|bạt thái/i, name: 'Baht Thái (THB)' }
+    ];
+
+    for (const f of fiatMap) {
+      if (f.pattern.test(query)) {
+        const res = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${f.key}.json`);
+        if (res.ok) {
+          const d = await res.json();
+          const rate = d?.[f.key]?.vnd;
+          if (rate && !isNaN(rate)) {
+            contextLines.push(`- Tỷ giá ${f.name} liên ngân hàng hôm nay: 1 ${f.key.toUpperCase()} = ${Math.round(rate).toLocaleString('vi-VN')} VNĐ.`);
+          }
+        }
+      }
+    }
   } catch (e) {
-    console.warn('Không tải được giá vàng thị trường realtime:', e.message);
-    return null;
+    console.warn('Lỗi cập nhật dữ liệu sàn thị trường realtime:', e.message);
   }
+
+  if (contextLines.length === 0) return '';
+  return `\n[DỮ LIỆU SÀN THỊ TRƯỜNG THỰC TẾ HÔM NAY]:\n${contextLines.join('\n')}\n(HÃY DÙNG DỮ LIỆU TỶ GIÁ THỰC TẾ NÀY ĐỂ QUY ĐỔI CHUẨN XÁC THEO SỐ LƯỢNG ĐƯỢC CUNG CẤP)`;
 }
 
 async function callGeminiAppraisal(assetName) {
@@ -1801,27 +1856,18 @@ async function callGeminiAppraisal(assetName) {
   const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
-  // Kiểm tra nếu tài sản liên quan đến vàng, tự động lấy giá vàng thị trường hôm nay từ sàn quy đổi
-  const isGoldAsset = /vàng|gold|9999|sjc|pnj|doji|chỉ|lượng|cây/i.test(assetName);
-  let goldContext = '';
-  if (isGoldAsset) {
-    const goldData = await fetchRealtimeGoldReference();
-    if (goldData) {
-      goldContext = `\n[DỮ LIỆU THỊ TRƯỜNG THỰC TẾ HÔM NAY]:
-- Giá vàng giao ngay quy đổi sàn thị trường hôm nay: khoảng ${goldData.vnEstimatedChi.toLocaleString('vi-VN')} VNĐ/chỉ (tương đương ~${goldData.vnEstimatedLuong.toLocaleString('vi-VN')} VNĐ/lượng).
-- HÃY DÙNG CON SỐ THỊ TRƯỜNG NÀY ĐỂ TÍNH TOÁN VÀ ĐỊNH GIÁ CHUẨN XÁC THEO NGÀY HÔM NAY.`;
-    }
-  }
+  // Tự động kiểm tra dữ liệu thị trường trực tiếp cho Vàng, Ngoại tệ, Crypto
+  const marketContext = await fetchRealtimeMarketReference(assetName);
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
-Hãy tra cứu (hoặc thẩm định) giá thị trường thực tế mới nhất tại Việt Nam cho: "${assetName}".${goldContext}
+Hãy tra cứu (hoặc thẩm định) giá thị trường thực tế mới nhất tại Việt Nam cho: "${assetName}".${marketContext}
 
-Quy tắc thẩm định:
-- Nếu là vàng: Hãy dùng dữ liệu thị trường thực tế ở trên hoặc tra cứu giá mới nhất hôm nay. Nếu người dùng không ghi rõ khối lượng, ước tính chuẩn theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
-- Nếu là xe máy, điện thoại, đồ cũ: tra cứu/ước tính giá bán lại tham khảo hiện nay tại Việt Nam theo độ hao mòn và thị trường đồ cũ.
+Quy tắc thẩm định bắt buộc:
+- Nếu là Vàng, Ngoại tệ, Crypto: HÃY DÙNG DỮ LIỆU TỶ GIÁ THỊ TRƯỜNG THỰC TẾ Ở TRÊN để tính toán và quy đổi chính xác theo số lượng món đồ/tiền tệ.
+- Nếu là xe máy, điện thoại, máy tính, đồ cũ: tra cứu/ước tính giá bán lại tham khảo hiện nay tại Việt Nam theo độ hao mòn và thị trường đồ cũ.
 - Chỉ trả về duy nhất 1 JSON object hợp lệ:
-{"price": 13000000, "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)"}
+{"price": 13000000, "note": "Ước tính theo thời giá hôm nay (bấm vào để nói rõ thêm chi tiết nếu khác)"}
 Trong đó "price" là số nguyên VNĐ, "note" ngắn gọn dưới 35 từ.`;
 
   const response = await postToGemini(url, prompt, true);
@@ -1864,21 +1910,13 @@ async function callGeminiChatAppraisal(asset, userMessage) {
   const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
-  // Kiểm tra nếu tài sản liên quan đến vàng, bổ sung giá thị trường realtime từ sàn
-  const isGoldAsset = /vàng|gold|9999|sjc|pnj|doji|chỉ|lượng|cây/i.test(asset.name + ' ' + userMessage);
-  let goldContext = '';
-  if (isGoldAsset) {
-    const goldData = await fetchRealtimeGoldReference();
-    if (goldData) {
-      goldContext = `\n[DỮ LIỆU THỊ TRƯỜNG THỰC TẾ HÔM NAY]:
-- Giá vàng giao ngay quy đổi sàn thị trường hôm nay: khoảng ${goldData.vnEstimatedChi.toLocaleString('vi-VN')} VNĐ/chỉ (tương đương ~${goldData.vnEstimatedLuong.toLocaleString('vi-VN')} VNĐ/lượng).`;
-    }
-  }
+  // Tự động kiểm tra dữ liệu thị trường trực tiếp cho Vàng, Ngoại tệ, Crypto
+  const marketContext = await fetchRealtimeMarketReference(asset.name + ' ' + userMessage);
 
   const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
-Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.${goldContext}
+Bạn là chuyên gia thẩm định giá tài sản thị trường Việt Nam (tính đến thời điểm ${realtimeNow}) và là trợ lý thông minh lắng nghe người dùng.${marketContext}
 HÃY DÙNG GOOGLE SEARCH để tra cứu giá thị trường thực tế mới nhất nếu cần thiết.
 
 Tài sản đang thẩm định: "${asset.name}".
