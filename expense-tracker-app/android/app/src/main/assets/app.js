@@ -1723,7 +1723,6 @@ async function callGeminiAppraisal(assetName) {
 
   const prompt = `Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (năm hiện tại) và hãy cập nhật giá thật chính xác, đặc biệt là giá vàng (phải đúng theo thị trường từng ngày).
 Hãy thẩm định giá trị thị trường hiện tại hợp lý bằng tiền VNĐ cho: "${assetName}".
-Lưu ý quan trọng: Nếu tài sản là vàng hoặc kim loại quý mà người dùng không ghi rõ khối lượng (ví dụ chỉ ghi "vàng 9999"), hãy ước tính theo 1 chỉ vàng nhẫn 9999 tiêu chuẩn (khoảng 8.5 - 9.0 triệu) và ghi rõ trong "note" là "Ước tính theo 1 chỉ vàng 9999 (bấm vào thẻ để giải thích thêm khối lượng cho AI)".
 Yêu cầu bắt buộc: Chỉ trả về duy nhất 1 JSON object không kèm markdown với 2 trường:
 {
   "price": 14000000,
