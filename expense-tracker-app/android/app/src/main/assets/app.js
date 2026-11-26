@@ -1759,6 +1759,13 @@ async function postToGemini(url, prompt, useSearch = true) {
   return response;
 }
 
+function getGeminiEndpoint(apiKey) {
+  // Dùng gemini-2.5-flash hoặc gemini-2.5-flash-lite / gemini-3.5-flash-lite
+  // Ưu tiên gemini-2.5-flash (nếu có) hoặc gemini-2.5-flash-lite
+  const model = 'gemini-2.5-flash';
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+}
+
 async function callGeminiAppraisal(assetName) {
   const apiKey = State.geminiApiKey || localStorage.getItem(STORAGE_KEY_GEMINI_KEY) || '';
   if (!apiKey) {
@@ -1766,9 +1773,7 @@ async function callGeminiAppraisal(assetName) {
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
 
-  // Model flash lite ổn định trên endpoint v1beta
-  const model = 'gemini-3.5-flash-lite';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
@@ -1791,6 +1796,9 @@ Trong đó "price" là số nguyên VNĐ, "note" ngắn gọn dưới 35 từ.`;
   }
 
   const data = await response.json();
+  const searchQueries = data?.candidates?.[0]?.groundingMetadata?.webSearchQueries;
+  console.log('Grounding queries:', searchQueries || 'NONE');
+
   const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!rawText) throw new Error('AI không trả về kết quả');
 
@@ -1816,8 +1824,7 @@ async function callGeminiChatAppraisal(asset, userMessage) {
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
 
-  const model = 'gemini-3.5-flash-lite';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = getGeminiEndpoint(apiKey);
   const realtimeNow = getCurrentRealtimeContext();
 
   const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
@@ -1855,6 +1862,9 @@ Yêu cầu bắt buộc: Trả về 1 JSON object:
   }
 
   const data = await response.json();
+  const searchQueries = data?.candidates?.[0]?.groundingMetadata?.webSearchQueries;
+  console.log('Grounding queries:', searchQueries || 'NONE');
+
   const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!rawText) throw new Error('AI không trả về kết quả');
 
