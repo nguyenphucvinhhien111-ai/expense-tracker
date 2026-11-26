@@ -1729,8 +1729,10 @@ async function postToGemini(url, prompt, useSearch = true) {
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]
   };
+
   if (useSearch) {
-    payload.tools = [{ googleSearch: {} }];
+    // REST API dùng snake_case google_search (không dùng responseMimeType: 'application/json' kèm search)
+    payload.tools = [{ google_search: {} }];
   } else {
     payload.generationConfig = { responseMimeType: 'application/json' };
   }
@@ -1741,9 +1743,10 @@ async function postToGemini(url, prompt, useSearch = true) {
     body: JSON.stringify(payload)
   });
 
-  // Nếu bật search bị lỗi (ví dụ quota search hoặc model chưa bật grounding), tự động fallback gọi chuẩn
+  // Nếu bật search bị lỗi (ví dụ quota search hoặc model chưa bật grounding), in log chi tiết và fallback gọi chuẩn
   if (!response.ok && useSearch) {
-    console.warn('Google Search grounding error, retrying without search grounding...');
+    const errText = await response.text().catch(() => '');
+    console.warn('Google Search grounding error:', response.status, errText);
     delete payload.tools;
     payload.generationConfig = { responseMimeType: 'application/json' };
     response = await fetch(url, {
@@ -1762,26 +1765,22 @@ async function callGeminiAppraisal(assetName) {
     showToast('⚠️ Vui lòng vào Cài đặt và nhập Google Gemini API Key trước!');
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+
+  // Model flash lite ổn định trên endpoint v1beta
+  const model = 'gemini-3.5-flash-lite';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const realtimeNow = getCurrentRealtimeContext();
 
   const prompt = `Thời điểm thực tế hiện tại: ${realtimeNow}.
 Bạn là chuyên gia thẩm định giá tài sản và đồ cũ tại thị trường Việt Nam (tính đến thời điểm ${realtimeNow}).
-HÃY DÙNG CÔNG CỤ TÌM KIẾM (GOOGLE SEARCH) để tra cứu bảng giá thị trường mới nhất tại Việt Nam của tài sản này hôm nay trước khi đưa ra mức giá!
-Đặc biệt:
-- Nếu là VÀNG (vàng 9999, vàng nhẫn trơn, vàng miếng SJC, PNJ, Doji): Hãy tra cứu giá vàng ngày hôm nay. Nếu người dùng không ghi khối lượng, hãy tính theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay, và ghi rõ trong note: "Ước tính theo 1 chỉ vàng 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
-- Nếu là xe máy, điện thoại, đồ cũ: Hãy tra cứu giá bán cũ trung bình của dòng máy/đời xe này.
+Hãy dùng Google Search để tra cứu giá thị trường thực tế mới nhất tại Việt Nam hôm nay cho: "${assetName}".
 
-Tài sản cần thẩm định: "${assetName}".
-
-Yêu cầu bắt buộc: Trả về duy nhất 1 JSON object dạng:
-\`\`\`json
-{
-  "price": 12000000,
-  "note": "Giá vàng nhẫn 9999 hôm nay khoảng 12.6 - 13.2 triệu/chỉ"
-}
-\`\`\`
-Lưu ý "price" phải là số nguyên (VNĐ), "note" là giải thích ngắn gọn dưới 35 từ.`;
+Quy tắc:
+- Nếu là vàng (9999, nhẫn trơn, SJC, PNJ, DOJI): tra cứu giá vàng hôm nay. Nếu không ghi khối lượng, ước tính theo 1 chỉ vàng nhẫn 9999 theo thời giá hôm nay và ghi trong "note": "Ước tính theo 1 chỉ vàng nhẫn 9999 theo giá hôm nay (bấm vào để nói rõ khối lượng nếu khác)".
+- Nếu là xe máy, điện thoại, đồ cũ: tra cứu giá bán lại tham khảo hiện nay tại Việt Nam.
+- Chỉ trả về duy nhất 1 JSON object hợp lệ:
+{"price": 13000000, "note": "Giá tham khảo thị trường hôm nay"}
+Trong đó "price" là số nguyên VNĐ, "note" ngắn gọn dưới 35 từ.`;
 
   const response = await postToGemini(url, prompt, true);
 
@@ -1792,16 +1791,17 @@ Lưu ý "price" phải là số nguyên (VNĐ), "note" là giải thích ngắn 
   }
 
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!rawText) throw new Error('AI không trả về kết quả');
 
   let parsed;
   try {
-    parsed = JSON.parse(rawText);
+    const cleanJson = rawText.replace(/```json|```/g, '').trim();
+    parsed = JSON.parse(cleanJson);
   } catch (e) {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-    else throw new Error('Không phân tích được kết quả JSON từ AI');
+    else throw new Error('Không phân tích được kết quả JSON từ AI: ' + rawText.slice(0, 80));
   }
 
   const price = Math.round(Number(parsed.price) || 0);
@@ -1815,7 +1815,9 @@ async function callGeminiChatAppraisal(asset, userMessage) {
     showToast('⚠️ Vui lòng vào Cài đặt và nhập Google Gemini API Key trước!');
     throw new Error('Chưa cấu hình Google Gemini API Key');
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+
+  const model = 'gemini-3.5-flash-lite';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const realtimeNow = getCurrentRealtimeContext();
 
   const historyText = (asset.chatHistory || []).map(m => `${m.role === 'user' ? 'Người dùng' : 'Gemini'}: ${m.text}`).join('\n');
@@ -1842,13 +1844,7 @@ Nhiệm vụ của bạn:
 5. Tóm tắt ghi chú ngắn gọn ("note") dưới 25 từ cho thẻ tài sản.
 
 Yêu cầu bắt buộc: Trả về 1 JSON object:
-\`\`\`json
-{
-  "price": 12000000,
-  "reply": "Dạ em đã hiểu rõ! Với 12 triệu mới mua (tương đương khoảng 1.3 - 1.4 chỉ hoặc tính cả tiền công), em đã cập nhật lại giá tài sản thành 12.000.000 ₫ cho mình rồi ạ.",
-  "note": "1.3 chỉ vàng 9999 mới mua 12tr (đã cập nhật theo thực tế)"
-}
-\`\`\``;
+{"price": 12000000, "reply": "Dạ em đã hiểu rõ! Với 12 triệu mới mua (tương đương khoảng 1.3 - 1.4 chỉ hoặc tính cả tiền công), em đã cập nhật lại giá tài sản thành 12.000.000 ₫ cho mình rồi ạ.", "note": "1.3 chỉ vàng 9999 mới mua 12tr (đã cập nhật theo thực tế)"}`;
 
   const response = await postToGemini(url, prompt, true);
 
@@ -1859,16 +1855,17 @@ Yêu cầu bắt buộc: Trả về 1 JSON object:
   }
 
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!rawText) throw new Error('AI không trả về kết quả');
 
   let parsed;
   try {
-    parsed = JSON.parse(rawText);
+    const cleanJson = rawText.replace(/```json|```/g, '').trim();
+    parsed = JSON.parse(cleanJson);
   } catch (e) {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-    else throw new Error('Không phân tích được kết quả JSON từ AI');
+    else throw new Error('Không phân tích được kết quả JSON từ AI: ' + rawText.slice(0, 80));
   }
 
   const price = Math.round(Number(parsed.price) || 0);
